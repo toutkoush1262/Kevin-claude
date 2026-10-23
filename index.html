@@ -29,6 +29,11 @@
   .card b { display: block; color: #ffe08a; margin-bottom: 6px; font-size: 17px; }
   .card span { font-size: 14px; color: #cfd8cf; }
   .card small { display: block; margin-top: 8px; color: #8fb39a; }
+  .card.mod { border-color: #8a5cc2; background: #241d33; }
+  .card.mod:hover { border-color: #ffe08a; background: #2e2542; }
+  .mod-group { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .mod-group > div:first-child { color: #c9a8ff; font-weight: 700; }
+  .mod-group .pair { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 </style>
 </head>
 <body>
@@ -47,7 +52,7 @@
 </div>
 
 <div id="levelup" class="overlay hidden">
-  <h2>Level up! Choose a blessing</h2>
+  <h2 id="levelTitle">Level up! Choose a blessing</h2>
   <div id="cards" class="cards"></div>
 </div>
 
@@ -139,6 +144,38 @@
   ];
   const tendrilDamage = lvl => 12 + lvl * 4;
   const tendrilCooldown = lvl => 2.2 - lvl * 0.15;
+  // Tendril stats for a given level, after any skill modifier
+  function tendrilCfg(p, lvl) {
+    const c = { ...TENDRIL[lvl], dmgMult: 1 };
+    if (p.mods.tendril === 'taproot') { c.depth = 0; c.maxHits = 1; c.dmgMult = 3; }
+    if (p.mods.tendril === 'web') { c.branches += 1; c.depth += 1; c.maxHits = Math.round(c.maxHits * 1.5); c.dmgMult = 0.6; }
+    return c;
+  }
+
+  // Skill modifiers: every 5 levels, pick one of two for a skill you own. Each skill gets one, permanently.
+  const MODIFIERS = {
+    bolt: [
+      { id: 'scatter', name: 'Scattershot', desc: '+2 spore shots in a wide fan, but each deals 30% less damage.' },
+      { id: 'heavy', name: 'Heavy Spore', desc: 'Fires one big spore shot that deals 2.5× damage and pierces 3 more enemies.' },
+    ],
+    orbit: [
+      { id: 'wide', name: 'Wide Ring', desc: 'Buddies circle 60% farther out, protecting a bigger area.' },
+      { id: 'frenzy', name: 'Buddy Frenzy', desc: 'Buddies spin twice as fast and hit more often, but deal 25% less damage.' },
+    ],
+    aura: [
+      { id: 'fog', name: 'Toxic Fog', desc: 'Cloud is 50% bigger, but deals 30% less damage.' },
+      { id: 'choke', name: 'Choking Spores', desc: 'Enemies inside the cloud are slowed by 50%.' },
+    ],
+    tendril: [
+      { id: 'taproot', name: 'Taproot', desc: 'No splits. One thick tendril hits a single enemy for 3× damage.' },
+      { id: 'web', name: 'Fungal Web', desc: '+1 branch and +1 split (hit cap ×1.5), but every hit deals 40% less damage.' },
+    ],
+    thorn: [
+      { id: 'barrage', name: 'Thorn Barrage', desc: 'Bursts twice as often, but each thorn deals 40% less damage.' },
+      { id: 'bramble', name: 'Bramble Lances', desc: 'Thorns fly 60% farther and pierce 4 more enemies.' },
+    ],
+  };
+  const SKILL_NAMES = { bolt: 'Spore Shot', orbit: 'Mushroom Buddies', aura: 'Puffball Cloud', tendril: 'Mycelium Tendrils', thorn: 'Thorn Nova' };
 
   const UPGRADES = [
     { id: 'bolt', name: 'Spore Shot', desc: 'Fires more spore shots, faster.', max: 8,
@@ -148,7 +185,7 @@
     { id: 'aura', name: 'Puffball Cloud', desc: 'A poison spore cloud damages nearby enemies.', max: 6,
       apply: p => { p.w.aura.level++; } },
     { id: 'tendril', name: 'Mycelium Tendrils', desc: 'A root tendril lashes an enemy, then branches off to strike two more.', max: 6,
-      info: p => { const c = TENDRIL[(p.upgrades.tendril || 0) + 1]; return `${c.branches} branches · ${c.depth} split${c.depth > 1 ? 's' : ''} · up to ${c.maxHits} hits`; },
+      info: p => { const c = tendrilCfg(p, (p.upgrades.tendril || 0) + 1); return c.depth === 0 ? `single target · 3× damage` : `${c.branches} branches · ${c.depth} split${c.depth > 1 ? 's' : ''} · up to ${c.maxHits} hits`; },
       apply: p => { p.w.tendril.level++; } },
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: 6,
       apply: p => { p.w.thorn.level++; } },
@@ -171,7 +208,7 @@
       t: 0, kills: 0, running: true, paused: false, spawnAcc: 0,
       player: {
         x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0,
-        level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {},
+        level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {}, mods: {},
         w: {
           bolt: { level: 1, cd: 0 },
           orbit: { level: 0, angle: 0, hitCd: new Map() },
@@ -226,6 +263,9 @@
     return best;
   }
 
+  const orbitRadius = p => (60 + p.w.orbit.level * 6) * (p.mods.orbit === 'wide' ? 1.6 : 1);
+  const auraRadius = p => (60 + p.w.aura.level * 14) * (p.mods.aura === 'fog' ? 1.5 : 1);
+
   function updateWeapons(dt) {
     const p = S.player, w = p.w;
 
@@ -234,12 +274,15 @@
       w.bolt.cd -= dt;
       if (w.bolt.cd <= 0) {
         w.bolt.cd = Math.max(0.25, 0.9 - w.bolt.level * 0.08);
-        const count = 1 + Math.floor(w.bolt.level / 2);
+        const mod = p.mods.bolt;
+        let count = 1 + Math.floor(w.bolt.level / 2), spread = 0.18, dmg = (8 + w.bolt.level * 2) * p.might, pierce = 1 + Math.floor(w.bolt.level / 4), r = 5;
+        if (mod === 'scatter') { count += 2; spread = 0.3; dmg *= 0.7; }
+        if (mod === 'heavy') { count = 1; dmg *= 2.5; pierce += 3; r = 9; }
         const target = nearestEnemy(500);
         const base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
         for (let i = 0; i < count; i++) {
-          const a = base + (i - (count - 1) / 2) * 0.18;
-          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r: 5, dmg: (8 + w.bolt.level * 2) * p.might, life: 1.4, pierce: 1 + Math.floor(w.bolt.level / 4), kind: 'bolt', hit: new Set() });
+          const a = base + (i - (count - 1) / 2) * spread;
+          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r, dmg, life: 1.4, pierce, kind: 'bolt', hit: new Set() });
         }
       }
     }
@@ -248,19 +291,23 @@
     if (w.thorn.level > 0) {
       w.thorn.cd -= dt;
       if (w.thorn.cd <= 0) {
-        w.thorn.cd = Math.max(1.2, 3 - w.thorn.level * 0.3);
+        const mod = p.mods.thorn;
+        w.thorn.cd = Math.max(1.2, 3 - w.thorn.level * 0.3) * (mod === 'barrage' ? 0.5 : 1);
         const n = 6 + w.thorn.level * 2;
+        const dmg = (6 + w.thorn.level * 3) * p.might * (mod === 'barrage' ? 0.6 : 1);
+        const life = mod === 'bramble' ? 1.45 : 0.9, pierce = mod === 'bramble' ? 6 : 2;
         for (let i = 0; i < n; i++) {
           const a = (i / n) * Math.PI * 2;
-          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, r: 4, dmg: (6 + w.thorn.level * 3) * p.might, life: 0.9, pierce: 2, kind: 'thorn', hit: new Set() });
+          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, r: 4, dmg, life, pierce, kind: 'thorn', hit: new Set() });
         }
       }
     }
 
     // Spore orbit: rotating mushrooms
     if (w.orbit.level > 0) {
-      w.orbit.angle += dt * (2.2 + w.orbit.level * 0.25);
-      const n = w.orbit.level + 1, rad = 60 + w.orbit.level * 6;
+      const mod = p.mods.orbit;
+      w.orbit.angle += dt * (2.2 + w.orbit.level * 0.25) * (mod === 'frenzy' ? 2 : 1);
+      const n = w.orbit.level + 1, rad = orbitRadius(p);
       for (const [e, cd] of w.orbit.hitCd) { if (cd - dt <= 0) w.orbit.hitCd.delete(e); else w.orbit.hitCd.set(e, cd - dt); }
       for (let i = 0; i < n; i++) {
         const a = w.orbit.angle + (i / n) * Math.PI * 2;
@@ -268,8 +315,8 @@
         for (const e of S.enemies) {
           if (w.orbit.hitCd.has(e)) continue;
           if ((e.x - ox) ** 2 + (e.y - oy) ** 2 < (e.r + 12) ** 2) {
-            damageEnemy(e, (10 + w.orbit.level * 4) * p.might, Math.cos(a) * 150, Math.sin(a) * 150);
-            w.orbit.hitCd.set(e, 0.4);
+            damageEnemy(e, (10 + w.orbit.level * 4) * p.might * (mod === 'frenzy' ? 0.75 : 1), Math.cos(a) * 150, Math.sin(a) * 150);
+            w.orbit.hitCd.set(e, mod === 'frenzy' ? 0.2 : 0.4);
           }
         }
       }
@@ -279,14 +326,14 @@
     if (w.tendril.level > 0) {
       w.tendril.cd -= dt;
       if (w.tendril.cd <= 0) {
-        const cfg = TENDRIL[w.tendril.level];
+        const cfg = tendrilCfg(p, w.tendril.level), thick = p.mods.tendril === 'taproot';
         const first = nearestEnemy(280);
         if (!first) w.tendril.cd = 0.3;
         else {
           w.tendril.cd = tendrilCooldown(w.tendril.level);
-          const dmg = tendrilDamage(w.tendril.level) * p.might;
+          const dmg = tendrilDamage(w.tendril.level) * p.might * cfg.dmgMult;
           const hit = new Set([first]);
-          S.tendrils.push({ x1: p.x, y1: p.y, x2: first.x, y2: first.y, life: 0.4, seed: Math.random() * 99 });
+          S.tendrils.push({ x1: p.x, y1: p.y, x2: first.x, y2: first.y, life: thick ? 0.55 : 0.4, seed: Math.random() * 99, thick });
           damageEnemy(first, dmg);
           let frontier = [first];
           for (let gen = 1; gen <= cfg.depth && hit.size < cfg.maxHits; gen++) {
@@ -314,9 +361,12 @@
       w.aura.tick -= dt;
       if (w.aura.tick <= 0) {
         w.aura.tick = 0.5;
-        const rad = 60 + w.aura.level * 14;
+        const rad = auraRadius(p), mod = p.mods.aura;
         for (const e of S.enemies) {
-          if (dist2(e, p) < (rad + e.r) ** 2) damageEnemy(e, (3 + w.aura.level * 2) * p.might);
+          if (dist2(e, p) < (rad + e.r) ** 2) {
+            damageEnemy(e, (3 + w.aura.level * 2) * p.might * (mod === 'fog' ? 0.7 : 1));
+            if (mod === 'choke') e.slow = 0.6;
+          }
         }
       }
     }
@@ -327,6 +377,8 @@
     const p = S.player;
     p.level++; p.xp -= p.xpNext; p.xpNext = Math.floor(p.xpNext * 1.3 + 4);
     S.paused = true;
+    if (p.level % 5 === 0 && showModifierChoice()) return;
+    document.getElementById('levelTitle').textContent = 'Level up! Choose a blessing';
     const pool = UPGRADES.filter(u => (p.upgrades[u.id] || 0) < u.max);
     const picks = [];
     while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
@@ -348,6 +400,38 @@
     }
     document.getElementById('levelup').classList.remove('hidden');
   }
+  // Every 5 levels: offer modifiers for up to two owned skills that don't have one yet
+  function showModifierChoice() {
+    const p = S.player;
+    const owned = Object.keys(MODIFIERS).filter(k => p.w[k].level > 0 && !p.mods[k]);
+    if (!owned.length) return false;
+    const skills = [];
+    while (skills.length < 2 && owned.length) skills.push(owned.splice(Math.floor(Math.random() * owned.length), 1)[0]);
+    document.getElementById('levelTitle').textContent = `Level ${p.level}! Choose a skill modifier`;
+    const cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    for (const k of skills) {
+      const group = document.createElement('div');
+      group.className = 'mod-group';
+      group.innerHTML = `<div>${SKILL_NAMES[k]}</div><div class="pair"></div>`;
+      for (const m of MODIFIERS[k]) {
+        const div = document.createElement('div');
+        div.className = 'card mod';
+        div.innerHTML = `<b>${m.name}</b><span>${m.desc}</span><small>Permanent modifier for ${SKILL_NAMES[k]}</small>`;
+        div.onclick = () => {
+          p.mods[k] = m.id;
+          document.getElementById('levelup').classList.add('hidden');
+          S.paused = false;
+          if (p.xp >= p.xpNext) levelUp();
+        };
+        group.lastChild.appendChild(div);
+      }
+      cards.appendChild(group);
+    }
+    document.getElementById('levelup').classList.remove('hidden');
+    return true;
+  }
+
   // Bolt starts at level 1 already
   function initUpgradeCounts() { S.player.upgrades.bolt = 1; }
 
@@ -385,7 +469,9 @@
       const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
       let sx = dx / d, sy = dy / d;
       if (e.type === 'bat' || e.type === 'pixie') { e.phase += dt * 6; sx += Math.cos(e.phase) * 0.5; sy += Math.sin(e.phase) * 0.5; }
-      e.x += sx * e.speed * dt + e.kx * dt; e.y += sy * e.speed * dt + e.ky * dt;
+      const spd = e.speed * (e.slow > 0 ? 0.5 : 1);
+      if (e.slow > 0) e.slow -= dt;
+      e.x += sx * spd * dt + e.kx * dt; e.y += sy * spd * dt + e.ky * dt;
       e.kx *= 0.85; e.ky *= 0.85;
       e.flash = Math.max(0, e.flash - dt);
       if (d < e.r + p.r && p.hurt <= 0) {
@@ -650,8 +736,8 @@
 
     // Aura
     if (p.w.aura.level > 0) {
-      const rad = 60 + p.w.aura.level * 14;
-      ctx.fillStyle = `rgba(170, 220, 90, ${0.12 + Math.sin(S.t * 4) * 0.03})`;
+      const rad = auraRadius(p);
+      ctx.fillStyle = `rgba(${p.mods.aura === 'choke' ? '150, 120, 200' : '170, 220, 90'}, ${0.12 + Math.sin(S.t * 4) * 0.03})`;
       ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
       ctx.fillStyle = 'rgba(200,240,120,0.35)';
       for (let i = 0; i < 10; i++) { const a = S.t * 0.7 + i * 0.63, rr = rad * (0.4 + 0.5 * ((i * 0.37 + S.t * 0.2) % 1)); ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * rr, p.y + Math.sin(a) * rr, 3, 0, 7); ctx.fill(); }
@@ -682,7 +768,8 @@
       const nx = -dy / len, ny = dx / len, segs = Math.max(4, Math.floor(len / 14));
       const pt = i => { const k = i / segs, wob = (i === 0 || i === segs) ? 0 : Math.sin(k * 9 + td.seed + S.t * 12) * 6 * Math.sin(k * Math.PI); return [td.x1 + dx * k + nx * wob, td.y1 + dy * k + ny * wob]; };
       ctx.globalAlpha = a; ctx.lineCap = 'round';
-      for (const [wid, col] of [[6, 'rgba(200,255,190,0.25)'], [2.5, '#efe6d0']]) {
+      const tw = td.thick ? 2.4 : 1;
+      for (const [wid, col] of [[6 * tw, 'rgba(200,255,190,0.25)'], [2.5 * tw, '#efe6d0']]) {
         ctx.strokeStyle = col; ctx.lineWidth = wid; ctx.beginPath();
         for (let i = 0; i <= segs; i++) { const [x, y] = pt(i); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
         ctx.stroke();
@@ -697,7 +784,7 @@
 
     // Orbiting mushrooms
     if (p.w.orbit.level > 0) {
-      const n = p.w.orbit.level + 1, rad = 60 + p.w.orbit.level * 6;
+      const n = p.w.orbit.level + 1, rad = orbitRadius(p);
       for (let i = 0; i < n; i++) {
         const a = p.w.orbit.angle + (i / n) * Math.PI * 2;
         drawMushroom(p.x + Math.cos(a) * rad, p.y + Math.sin(a) * rad + 8, 18, '#c25bff', '#f3d4ff');
@@ -742,7 +829,10 @@
     const bx = W / 2 - 18, by = H / 2 + 22;
     ctx.fillStyle = '#400'; ctx.fillRect(bx, by, 36, 5);
     ctx.fillStyle = '#e33'; ctx.fillRect(bx, by, 36 * Math.max(0, p.hp / p.maxHp), 5);
-    if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, 52); }
+    let hy = 52;
+    if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, hy); hy += 18; }
+    ctx.textAlign = 'left'; ctx.fillStyle = '#c9a8ff'; ctx.font = '12px system-ui';
+    for (const k in p.mods) { ctx.fillText('✦ ' + MODIFIERS[k].find(m => m.id === p.mods[k]).name, 12, hy); hy += 16; }
     if (S.paused && document.getElementById('levelup').classList.contains('hidden')) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold 32px system-ui'; ctx.fillText('Paused (P)', W / 2, H / 2);
