@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Mushroom Survivors</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d1410; overflow: hidden; font-family: system-ui, sans-serif; color: #eee; }
+  canvas { display: block; touch-action: none; }
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(8, 12, 10, 0.82); text-align: center; padding: 16px; box-sizing: border-box;
+  }
+  .hidden { display: none; }
+  h1 { margin: 0 0 8px; font-size: clamp(28px, 6vw, 52px); color: #ff6b6b; text-shadow: 0 3px 0 #5a1a1a; }
+  h2 { margin: 0 0 16px; color: #ffe08a; }
+  p { max-width: 520px; line-height: 1.5; color: #cfd8cf; }
+  button {
+    font: inherit; font-size: 18px; padding: 10px 26px; margin-top: 12px; border: 0; border-radius: 8px;
+    background: #ff6b6b; color: #1a0d0d; font-weight: 700; cursor: pointer;
+  }
+  button:hover { background: #ff8a8a; }
+  .cards { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 720px; }
+  .card {
+    width: 200px; padding: 14px; border-radius: 10px; background: #1d2a22; border: 2px solid #3f5a48;
+    cursor: pointer; text-align: left; box-sizing: border-box;
+  }
+  .card:hover { border-color: #ffe08a; background: #24352a; }
+  .card b { display: block; color: #ffe08a; margin-bottom: 6px; font-size: 17px; }
+  .card span { font-size: 14px; color: #cfd8cf; }
+  .card small { display: block; margin-top: 8px; color: #8fb39a; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="menu" class="overlay">
+  <h1>🍄 Mushroom Survivors 🍄</h1>
+  <p>The Fungal Forest is overrun by goblins, slimes, bats, trolls and wicked toadstools.
+    Survive as long as you can! Your spells fire automatically.</p>
+  <p><b>Move:</b> WASD / arrow keys, or drag on touch screens.<br>
+    Collect glowing spores to level up. Pick magic mushrooms for boosts:<br>
+    <span style="color:#ff6b6b">Red</span> heals · <span style="color:#6bc7ff">Blue</span> speed ·
+    <span style="color:#ffd84a">Gold</span> pulls in all spores</p>
+  <button id="startBtn">Start</button>
+</div>
+
+<div id="levelup" class="overlay hidden">
+  <h2>Level up! Choose a blessing</h2>
+  <div id="cards" class="cards"></div>
+</div>
+
+<div id="gameover" class="overlay hidden">
+  <h1>You were overwhelmed</h1>
+  <p id="finalStats"></p>
+  <button id="restartBtn">Play again</button>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Input ----------
+  const keys = {};
+  window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key === 'p' || e.key === 'Escape') togglePause(); });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+  const touch = { active: false, sx: 0, sy: 0, x: 0, y: 0 };
+  canvas.addEventListener('pointerdown', e => { touch.active = true; touch.sx = touch.x = e.clientX; touch.sy = touch.y = e.clientY; });
+  canvas.addEventListener('pointermove', e => { if (touch.active) { touch.x = e.clientX; touch.y = e.clientY; } });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => canvas.addEventListener(t, () => { touch.active = false; }));
+
+  function inputDir() {
+    let dx = 0, dy = 0;
+    if (keys['w'] || keys['arrowup']) dy -= 1;
+    if (keys['s'] || keys['arrowdown']) dy += 1;
+    if (keys['a'] || keys['arrowleft']) dx -= 1;
+    if (keys['d'] || keys['arrowright']) dx += 1;
+    if (touch.active) {
+      const tx = touch.x - touch.sx, ty = touch.y - touch.sy, d = Math.hypot(tx, ty);
+      if (d > 8) { dx = tx / Math.max(d, 50); dy = ty / Math.max(d, 50); }
+    }
+    const len = Math.hypot(dx, dy);
+    return len > 1 ? { x: dx / len, y: dy / len } : { x: dx, y: dy };
+  }
+
+  // ---------- Helpers ----------
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+  function hash(x, y) {
+    let h = (x * 374761393 + y * 668265263) | 0;
+    h = (h ^ (h >>> 13)) * 1274126177 | 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  }
+
+  // ---------- Enemy definitions ----------
+  const ENEMIES = {
+    slime:     { hp: 10, speed: 55, dmg: 6,  r: 13, xp: 1, color: '#7ee36b' },
+    bat:       { hp: 6,  speed: 105, dmg: 5, r: 10, xp: 1, color: '#8a6bd1' },
+    goblin:    { hp: 20, speed: 72, dmg: 9,  r: 14, xp: 2, color: '#6aa84f' },
+    toadstool: { hp: 35, speed: 45, dmg: 12, r: 17, xp: 3, color: '#d9443b' },
+    wisp:      { hp: 14, speed: 125, dmg: 7, r: 9,  xp: 2, color: '#9fe8ff' },
+    troll:     { hp: 140, speed: 38, dmg: 22, r: 28, xp: 12, color: '#7d8f6a' },
+  };
+
+  function spawnTable(t) {
+    const table = [['slime', 5], ['bat', 3]];
+    if (t > 30) table.push(['goblin', 4]);
+    if (t > 75) table.push(['toadstool', 3]);
+    if (t > 120) table.push(['wisp', 3]);
+    if (t > 180) table.push(['troll', 1]);
+    const total = table.reduce((s, e) => s + e[1], 0);
+    let r = Math.random() * total;
+    for (const [k, w] of table) { if ((r -= w) <= 0) return k; }
+    return 'slime';
+  }
+
+  // ---------- Upgrades ----------
+  const UPGRADES = [
+    { id: 'bolt', name: 'Arcane Bolt', desc: 'Fires more bolts, faster.', max: 8,
+      apply: p => { p.w.bolt.level++; } },
+    { id: 'orbit', name: 'Spore Orbit', desc: 'Spinning toadstools circle you and smash foes.', max: 6,
+      apply: p => { p.w.orbit.level++; } },
+    { id: 'aura', name: 'Puffball Cloud', desc: 'A poison spore cloud damages nearby enemies.', max: 6,
+      apply: p => { p.w.aura.level++; } },
+    { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: 6,
+      apply: p => { p.w.thorn.level++; } },
+    { id: 'hp', name: 'Troll Heart', desc: '+20 max health and heal 20.', max: 6,
+      apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); } },
+    { id: 'speed', name: 'Pixie Boots', desc: '+10% movement speed.', max: 5,
+      apply: p => { p.speed *= 1.1; } },
+    { id: 'might', name: 'Dragon Blood', desc: '+15% damage for all spells.', max: 6,
+      apply: p => { p.might *= 1.15; } },
+    { id: 'magnet', name: 'Mycelium Net', desc: '+40% spore pickup range.', max: 4,
+      apply: p => { p.magnet *= 1.4; } },
+    { id: 'regen', name: 'Mossy Cloak', desc: 'Regenerate 0.5 HP per second.', max: 5,
+      apply: p => { p.regen += 0.5; } },
+  ];
+
+  // ---------- State ----------
+  let S;
+  function newGame() {
+    S = {
+      t: 0, kills: 0, running: true, paused: false, spawnAcc: 0,
+      player: {
+        x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0,
+        level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {},
+        w: {
+          bolt: { level: 1, cd: 0 },
+          orbit: { level: 0, angle: 0, hitCd: new Map() },
+          aura: { level: 0, tick: 0 },
+          thorn: { level: 0, cd: 0 },
+        },
+      },
+      enemies: [], bullets: [], gems: [], shrooms: [], particles: [], texts: [],
+      shroomTimer: 10,
+    };
+  }
+
+  // ---------- Spawning ----------
+  function spawnEnemy() {
+    const p = S.player;
+    const type = spawnTable(S.t);
+    const def = ENEMIES[type];
+    const ang = Math.random() * Math.PI * 2;
+    const d = Math.max(W, H) * 0.6 + 60;
+    const scale = 1 + S.t / 150;
+    S.enemies.push({
+      type, x: p.x + Math.cos(ang) * d, y: p.y + Math.sin(ang) * d,
+      hp: def.hp * scale, maxHp: def.hp * scale, r: def.r, speed: def.speed * rand(0.9, 1.1),
+      dmg: def.dmg, xp: def.xp, flash: 0, phase: Math.random() * 6.28, kx: 0, ky: 0,
+    });
+  }
+
+  function spawnShroom() {
+    const p = S.player;
+    const kinds = ['red', 'blue', 'gold'];
+    const ang = Math.random() * Math.PI * 2, d = rand(150, 400);
+    S.shrooms.push({ kind: kinds[Math.floor(Math.random() * 3)], x: p.x + Math.cos(ang) * d, y: p.y + Math.sin(ang) * d, life: 30 });
+  }
+
+  function damageEnemy(e, dmg, kx = 0, ky = 0) {
+    e.hp -= dmg; e.flash = 0.1; e.kx += kx; e.ky += ky;
+    S.texts.push({ x: e.x, y: e.y - e.r, txt: Math.round(dmg), life: 0.6 });
+  }
+
+  function killEnemy(e) {
+    S.kills++;
+    for (let i = 0; i < 8; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.5, color: ENEMIES[e.type].color });
+    S.gems.push({ x: e.x, y: e.y, v: e.xp, big: e.xp >= 5 });
+    if (Math.random() < 0.015) S.shrooms.push({ kind: 'red', x: e.x, y: e.y, life: 30 });
+  }
+
+  // ---------- Weapons ----------
+  function nearestEnemy(range) {
+    let best = null, bd = range * range;
+    for (const e of S.enemies) { const d = dist2(e, S.player); if (d < bd) { bd = d; best = e; } }
+    return best;
+  }
+
+  function updateWeapons(dt) {
+    const p = S.player, w = p.w;
+
+    // Arcane bolt: aimed at nearest enemies
+    if (w.bolt.level > 0) {
+      w.bolt.cd -= dt;
+      if (w.bolt.cd <= 0) {
+        w.bolt.cd = Math.max(0.25, 0.9 - w.bolt.level * 0.08);
+        const count = 1 + Math.floor(w.bolt.level / 2);
+        const target = nearestEnemy(500);
+        const base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
+        for (let i = 0; i < count; i++) {
+          const a = base + (i - (count - 1) / 2) * 0.18;
+          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r: 5, dmg: (8 + w.bolt.level * 2) * p.might, life: 1.4, pierce: 1 + Math.floor(w.bolt.level / 4), kind: 'bolt', hit: new Set() });
+        }
+      }
+    }
+
+    // Thorn nova: radial burst
+    if (w.thorn.level > 0) {
+      w.thorn.cd -= dt;
+      if (w.thorn.cd <= 0) {
+        w.thorn.cd = Math.max(1.2, 3 - w.thorn.level * 0.3);
+        const n = 6 + w.thorn.level * 2;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, r: 4, dmg: (6 + w.thorn.level * 3) * p.might, life: 0.9, pierce: 2, kind: 'thorn', hit: new Set() });
+        }
+      }
+    }
+
+    // Spore orbit: rotating mushrooms
+    if (w.orbit.level > 0) {
+      w.orbit.angle += dt * (2.2 + w.orbit.level * 0.25);
+      const n = w.orbit.level + 1, rad = 60 + w.orbit.level * 6;
+      for (const [e, cd] of w.orbit.hitCd) { if (cd - dt <= 0) w.orbit.hitCd.delete(e); else w.orbit.hitCd.set(e, cd - dt); }
+      for (let i = 0; i < n; i++) {
+        const a = w.orbit.angle + (i / n) * Math.PI * 2;
+        const ox = p.x + Math.cos(a) * rad, oy = p.y + Math.sin(a) * rad;
+        for (const e of S.enemies) {
+          if (w.orbit.hitCd.has(e)) continue;
+          if ((e.x - ox) ** 2 + (e.y - oy) ** 2 < (e.r + 12) ** 2) {
+            damageEnemy(e, (10 + w.orbit.level * 4) * p.might, Math.cos(a) * 150, Math.sin(a) * 150);
+            w.orbit.hitCd.set(e, 0.4);
+          }
+        }
+      }
+    }
+
+    // Puffball aura: damage over time
+    if (w.aura.level > 0) {
+      w.aura.tick -= dt;
+      if (w.aura.tick <= 0) {
+        w.aura.tick = 0.5;
+        const rad = 60 + w.aura.level * 14;
+        for (const e of S.enemies) {
+          if (dist2(e, p) < (rad + e.r) ** 2) damageEnemy(e, (3 + w.aura.level * 2) * p.might);
+        }
+      }
+    }
+  }
+
+  // ---------- Level up ----------
+  function levelUp() {
+    const p = S.player;
+    p.level++; p.xp -= p.xpNext; p.xpNext = Math.floor(p.xpNext * 1.3 + 4);
+    S.paused = true;
+    const pool = UPGRADES.filter(u => (p.upgrades[u.id] || 0) < u.max);
+    const picks = [];
+    while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    const cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    if (!picks.length) { p.hp = p.maxHp; S.paused = false; return; }
+    for (const u of picks) {
+      const lvl = p.upgrades[u.id] || 0;
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}</small>`;
+      div.onclick = () => {
+        u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
+        document.getElementById('levelup').classList.add('hidden');
+        S.paused = false;
+        if (p.xp >= p.xpNext) levelUp();
+      };
+      cards.appendChild(div);
+    }
+    document.getElementById('levelup').classList.remove('hidden');
+  }
+  // Bolt starts at level 1 already
+  function initUpgradeCounts() { S.player.upgrades.bolt = 1; }
+
+  function togglePause() {
+    if (!S || !S.running || !document.getElementById('levelup').classList.contains('hidden')) return;
+    S.paused = !S.paused;
+  }
+
+  // ---------- Update ----------
+  function update(dt) {
+    const p = S.player;
+    S.t += dt;
+
+    // Movement
+    const dir = inputDir();
+    const spd = p.speed * (p.speedBoost > 0 ? 1.6 : 1);
+    p.x += dir.x * spd * dt; p.y += dir.y * spd * dt;
+    if (dir.x) p.face = Math.sign(dir.x);
+    p.moving = dir.x || dir.y;
+    p.speedBoost = Math.max(0, p.speedBoost - dt);
+    p.hurt = Math.max(0, p.hurt - dt);
+    p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
+
+    // Spawning: rate ramps up over time
+    const rate = 0.8 + S.t / 25;
+    S.spawnAcc += rate * dt;
+    while (S.spawnAcc >= 1 && S.enemies.length < 400) { S.spawnAcc--; spawnEnemy(); }
+    S.shroomTimer -= dt;
+    if (S.shroomTimer <= 0) { S.shroomTimer = rand(12, 20); spawnShroom(); }
+
+    updateWeapons(dt);
+
+    // Enemies
+    for (const e of S.enemies) {
+      const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
+      let sx = dx / d, sy = dy / d;
+      if (e.type === 'bat' || e.type === 'wisp') { e.phase += dt * 6; sx += Math.cos(e.phase) * 0.5; sy += Math.sin(e.phase) * 0.5; }
+      e.x += sx * e.speed * dt + e.kx * dt; e.y += sy * e.speed * dt + e.ky * dt;
+      e.kx *= 0.85; e.ky *= 0.85;
+      e.flash = Math.max(0, e.flash - dt);
+      if (d < e.r + p.r && p.hurt <= 0) {
+        p.hp -= e.dmg; p.hurt = 0.5;
+        if (p.hp <= 0) return gameOver();
+      }
+      // Despawn far-away enemies and respawn near
+      if (d > Math.max(W, H) * 1.5) { e.x = p.x - dx * 0.5; e.y = p.y - dy * 0.5; }
+    }
+    // Light separation so enemies don't stack completely
+    for (let i = 0; i < S.enemies.length; i++) {
+      const a = S.enemies[i];
+      for (let j = i + 1; j < Math.min(S.enemies.length, i + 12); j++) {
+        const b = S.enemies[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = a.r + b.r;
+        if (d > 0 && d < m) { const push = (m - d) / 2 / d; a.x -= dx * push; a.y -= dy * push; b.x += dx * push; b.y += dy * push; }
+      }
+    }
+
+    // Bullets
+    for (const b of S.bullets) {
+      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      for (const e of S.enemies) {
+        if (b.pierce <= 0 || b.hit.has(e)) continue;
+        if (dist2(b, e) < (b.r + e.r) ** 2) {
+          damageEnemy(e, b.dmg, b.vx * 0.3, b.vy * 0.3); b.hit.add(e); b.pierce--;
+        }
+      }
+      if (b.pierce <= 0) b.life = 0;
+    }
+    S.bullets = S.bullets.filter(b => b.life > 0);
+
+    // Deaths
+    S.enemies = S.enemies.filter(e => { if (e.hp <= 0) { killEnemy(e); return false; } return true; });
+
+    // Gems
+    for (const g of S.gems) {
+      const d = Math.sqrt(dist2(g, p));
+      if (g.pull || d < p.magnet) {
+        const s = Math.max(250, 600 - d) * dt;
+        g.x += (p.x - g.x) / (d || 1) * s; g.y += (p.y - g.y) / (d || 1) * s;
+      }
+      if (d < p.r + 6) { g.taken = true; p.xp += g.v; }
+    }
+    S.gems = S.gems.filter(g => !g.taken);
+    if (S.gems.length > 600) S.gems.splice(0, S.gems.length - 600);
+
+    // Magic mushrooms
+    for (const m of S.shrooms) {
+      m.life -= dt;
+      if (dist2(m, p) < (p.r + 14) ** 2) {
+        m.life = 0;
+        if (m.kind === 'red') { p.hp = Math.min(p.maxHp, p.hp + 30); S.texts.push({ x: p.x, y: p.y - 30, txt: '+30 HP', life: 1, color: '#ff8a8a' }); }
+        if (m.kind === 'blue') { p.speedBoost = 8; S.texts.push({ x: p.x, y: p.y - 30, txt: 'Speed!', life: 1, color: '#6bc7ff' }); }
+        if (m.kind === 'gold') { S.gems.forEach(g => g.pull = true); S.texts.push({ x: p.x, y: p.y - 30, txt: 'Spore storm!', life: 1, color: '#ffd84a' }); }
+      }
+    }
+    S.shrooms = S.shrooms.filter(m => m.life > 0);
+
+    // FX
+    for (const q of S.particles) { q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
+    S.particles = S.particles.filter(q => q.life > 0);
+    for (const t of S.texts) { t.y -= 30 * dt; t.life -= dt; }
+    S.texts = S.texts.filter(t => t.life > 0);
+
+    if (p.xp >= p.xpNext) levelUp();
+  }
+
+  function gameOver() {
+    S.running = false;
+    const m = Math.floor(S.t / 60), s = Math.floor(S.t % 60).toString().padStart(2, '0');
+    document.getElementById('finalStats').innerHTML = `Survived <b>${m}:${s}</b> · Level <b>${S.player.level}</b> · Defeated <b>${S.kills}</b> creatures`;
+    document.getElementById('gameover').classList.remove('hidden');
+  }
+
+  // ---------- Drawing ----------
+  function drawMushroom(x, y, s, cap, spots = '#fff') {
+    ctx.fillStyle = '#efe3c8';
+    ctx.fillRect(x - s * 0.25, y - s * 0.5, s * 0.5, s * 0.6);
+    ctx.fillStyle = cap;
+    ctx.beginPath(); ctx.ellipse(x, y - s * 0.5, s * 0.7, s * 0.5, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = spots;
+    ctx.beginPath(); ctx.arc(x - s * 0.3, y - s * 0.7, s * 0.1, 0, 7); ctx.arc(x + s * 0.2, y - s * 0.8, s * 0.12, 0, 7); ctx.arc(x + s * 0.4, y - s * 0.6, s * 0.08, 0, 7); ctx.fill();
+  }
+
+  function drawGround(cx, cy) {
+    ctx.fillStyle = '#1a2a1e';
+    ctx.fillRect(0, 0, W, H);
+    const cell = 80;
+    const x0 = Math.floor((cx - W / 2) / cell) - 1, x1 = Math.floor((cx + W / 2) / cell) + 1;
+    const y0 = Math.floor((cy - H / 2) / cell) - 1, y1 = Math.floor((cy + H / 2) / cell) + 1;
+    for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) {
+      const h = hash(gx, gy);
+      const sx = gx * cell + hash(gx + 7, gy) * cell - cx + W / 2;
+      const sy = gy * cell + hash(gx, gy + 7) * cell - cy + H / 2;
+      if (h < 0.35) { ctx.fillStyle = '#22382a'; ctx.fillRect(sx, sy, 3, 7); ctx.fillRect(sx + 4, sy + 2, 3, 5); }
+      else if (h < 0.42) { ctx.globalAlpha = 0.55; drawMushroom(sx, sy, 10, ['#a33', '#b86b2e', '#7a4fa3'][Math.floor(h * 100) % 3]); ctx.globalAlpha = 1; }
+      else if (h < 0.44) { ctx.fillStyle = '#2c3b33'; ctx.beginPath(); ctx.ellipse(sx, sy, 12, 8, 0, 0, 7); ctx.fill(); }
+      else if (h < 0.455) { // glowing fairy ring
+        ctx.fillStyle = 'rgba(180,255,200,0.15)';
+        for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; ctx.beginPath(); ctx.arc(sx + Math.cos(a) * 26, sy + Math.sin(a) * 18, 4, 0, 7); ctx.fill(); }
+      }
+    }
+  }
+
+  function drawEnemy(e) {
+    const def = ENEMIES[e.type], r = e.r, t = S.t;
+    ctx.save(); ctx.translate(e.x, e.y);
+    const col = e.flash > 0 ? '#fff' : def.color;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(0, r * 0.9, r * 0.8, r * 0.3, 0, 0, 7); ctx.fill();
+    switch (e.type) {
+      case 'slime': {
+        const sq = 1 + Math.sin(t * 8 + e.phase) * 0.1;
+        ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, r * 0.2, r * sq, r / sq, 0, Math.PI, 0); ctx.lineTo(r * sq, r * 0.6); ctx.lineTo(-r * sq, r * 0.6); ctx.fill();
+        ctx.fillStyle = '#123'; ctx.fillRect(-5, -2, 3, 4); ctx.fillRect(3, -2, 3, 4);
+        break;
+      }
+      case 'bat': {
+        const f = Math.sin(t * 20 + e.phase) * 0.6;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-r * 2, -r * f); ctx.lineTo(-r, r * 0.4); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r * 2, -r * f); ctx.lineTo(r, r * 0.4); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.7, 0, 7); ctx.fill();
+        ctx.fillStyle = '#ff4'; ctx.fillRect(-4, -3, 2, 2); ctx.fillRect(2, -3, 2, 2);
+        break;
+      }
+      case 'goblin': {
+        ctx.fillStyle = e.flash > 0 ? '#fff' : '#5b3a1e'; ctx.fillRect(-r * 0.6, 0, r * 1.2, r * 0.9);
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -r * 0.2, r * 0.7, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.4); ctx.lineTo(-r * 1.3, -r * 0.8); ctx.lineTo(-r * 0.5, -r * 0.05); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(r * 0.6, -r * 0.4); ctx.lineTo(r * 1.3, -r * 0.8); ctx.lineTo(r * 0.5, -r * 0.05); ctx.fill();
+        ctx.fillStyle = '#f33'; ctx.fillRect(-5, -r * 0.35, 3, 3); ctx.fillRect(2, -r * 0.35, 3, 3);
+        ctx.strokeStyle = '#aaa'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r * 0.8, r * 0.6); ctx.lineTo(r * 1.2, -r * 0.3); ctx.stroke();
+        break;
+      }
+      case 'toadstool': {
+        const hop = Math.abs(Math.sin(t * 5 + e.phase)) * 4;
+        ctx.translate(0, -hop);
+        ctx.fillStyle = e.flash > 0 ? '#fff' : '#e8d9b5'; ctx.fillRect(-r * 0.4, -r * 0.1, r * 0.8, r);
+        ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, -r * 0.1, r, r * 0.75, 0, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-r * 0.45, -r * 0.4, 3, 0, 7); ctx.arc(r * 0.3, -r * 0.6, 4, 0, 7); ctx.arc(r * 0.6, -r * 0.25, 2.5, 0, 7); ctx.fill();
+        ctx.fillStyle = '#300'; ctx.fillRect(-r * 0.25, r * 0.15, 3, 4); ctx.fillRect(r * 0.12, r * 0.15, 3, 4);
+        ctx.fillRect(-r * 0.2, r * 0.5, r * 0.4, 2);
+        break;
+      }
+      case 'wisp': {
+        const g = ctx.createRadialGradient(0, 0, 1, 0, 0, r * 2.2);
+        g.addColorStop(0, e.flash > 0 ? '#fff' : 'rgba(200,250,255,0.95)'); g.addColorStop(0.4, 'rgba(120,220,255,0.5)'); g.addColorStop(1, 'rgba(120,220,255,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r * 2.2, 0, 7); ctx.fill();
+        break;
+      }
+      case 'troll': {
+        ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, r * 0.1, r, r * 0.85, 0, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, -r * 0.7, r * 0.5, 0, 7); ctx.fill();
+        ctx.fillStyle = e.flash > 0 ? '#fff' : '#4a5a3c'; ctx.fillRect(-r * 1.15, -r * 0.2, r * 0.35, r * 0.9); ctx.fillRect(r * 0.8, -r * 0.2, r * 0.35, r * 0.9);
+        ctx.fillStyle = '#f5f0d0'; ctx.beginPath(); ctx.moveTo(-6, -r * 0.5); ctx.lineTo(-3, -r * 0.75); ctx.lineTo(0, -r * 0.5); ctx.moveTo(2, -r * 0.5); ctx.lineTo(5, -r * 0.75); ctx.lineTo(8, -r * 0.5); ctx.fill();
+        ctx.fillStyle = '#f80'; ctx.fillRect(-8, -r * 0.9, 4, 4); ctx.fillRect(4, -r * 0.9, 4, 4);
+        // health bar
+        ctx.fillStyle = '#300'; ctx.fillRect(-r, -r * 1.5, r * 2, 4);
+        ctx.fillStyle = '#e33'; ctx.fillRect(-r, -r * 1.5, r * 2 * Math.max(0, e.hp / e.maxHp), 4);
+        break;
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawPlayer(p) {
+    ctx.save(); ctx.translate(p.x, p.y);
+    const bob = p.moving ? Math.sin(S.t * 14) * 2 : 0;
+    if (p.hurt > 0 && Math.floor(p.hurt * 20) % 2) ctx.globalAlpha = 0.4;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 15, 12, 4, 0, 0, 7); ctx.fill();
+    ctx.translate(0, bob);
+    // robe
+    ctx.fillStyle = p.speedBoost > 0 ? '#3d8fd6' : '#4b3c8f';
+    ctx.beginPath(); ctx.moveTo(-11, 14); ctx.lineTo(11, 14); ctx.lineTo(6, -4); ctx.lineTo(-6, -4); ctx.closePath(); ctx.fill();
+    // face
+    ctx.fillStyle = '#f2d2b0'; ctx.beginPath(); ctx.arc(0, -7, 6.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.fillRect(p.face * 2 - 1, -8, 2, 2);
+    // mushroom cap hat
+    ctx.fillStyle = '#e8423b'; ctx.beginPath(); ctx.ellipse(0, -11, 13, 9, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-5, -15, 2.2, 0, 7); ctx.arc(3, -17, 2.6, 0, 7); ctx.arc(8, -13, 1.6, 0, 7); ctx.fill();
+    // staff
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(p.face * 12, 14); ctx.lineTo(p.face * 12, -14); ctx.stroke();
+    ctx.fillStyle = '#b6f'; ctx.beginPath(); ctx.arc(p.face * 12, -16, 3.5, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw() {
+    const p = S.player;
+    drawGround(p.x, p.y);
+    ctx.save();
+    ctx.translate(W / 2 - p.x, H / 2 - p.y);
+
+    // Aura
+    if (p.w.aura.level > 0) {
+      const rad = 60 + p.w.aura.level * 14;
+      ctx.fillStyle = `rgba(170, 220, 90, ${0.12 + Math.sin(S.t * 4) * 0.03})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(200,240,120,0.35)';
+      for (let i = 0; i < 10; i++) { const a = S.t * 0.7 + i * 0.63, rr = rad * (0.4 + 0.5 * ((i * 0.37 + S.t * 0.2) % 1)); ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * rr, p.y + Math.sin(a) * rr, 3, 0, 7); ctx.fill(); }
+    }
+
+    // Spores (xp gems)
+    for (const g of S.gems) {
+      ctx.fillStyle = g.big ? '#ffb347' : '#9dff8a';
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(g.x, g.y, g.big ? 5 : 3.2, 0, 7); ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    // Magic mushrooms
+    for (const m of S.shrooms) {
+      if (m.life < 5 && Math.floor(m.life * 6) % 2) continue;
+      const col = { red: '#ff4b4b', blue: '#4bb8ff', gold: '#ffd84a' }[m.kind];
+      ctx.shadowColor = col; ctx.shadowBlur = 18;
+      drawMushroom(m.x, m.y + 8 + Math.sin(S.t * 3) * 2, 22, col);
+      ctx.shadowBlur = 0;
+    }
+
+    for (const e of S.enemies) drawEnemy(e);
+    drawPlayer(p);
+
+    // Orbiting mushrooms
+    if (p.w.orbit.level > 0) {
+      const n = p.w.orbit.level + 1, rad = 60 + p.w.orbit.level * 6;
+      for (let i = 0; i < n; i++) {
+        const a = p.w.orbit.angle + (i / n) * Math.PI * 2;
+        drawMushroom(p.x + Math.cos(a) * rad, p.y + Math.sin(a) * rad + 8, 18, '#c25bff', '#f3d4ff');
+      }
+    }
+
+    // Bullets
+    for (const b of S.bullets) {
+      if (b.kind === 'bolt') {
+        ctx.fillStyle = '#d9a6ff'; ctx.shadowColor = '#b066ff'; ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+      } else {
+        ctx.strokeStyle = '#7bd36b'; ctx.lineWidth = 3; ctx.shadowBlur = 0;
+        const a = Math.atan2(b.vy, b.vx);
+        ctx.beginPath(); ctx.moveTo(b.x - Math.cos(a) * 8, b.y - Math.sin(a) * 8); ctx.lineTo(b.x + Math.cos(a) * 6, b.y + Math.sin(a) * 6); ctx.stroke();
+      }
+    }
+    ctx.shadowBlur = 0;
+
+    for (const q of S.particles) { ctx.globalAlpha = q.life * 2; ctx.fillStyle = q.color; ctx.fillRect(q.x - 2, q.y - 2, 4, 4); }
+    ctx.globalAlpha = 1;
+    ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center';
+    for (const t of S.texts) { ctx.globalAlpha = Math.min(1, t.life * 2); ctx.fillStyle = t.color || '#fff'; ctx.fillText(t.txt, t.x, t.y); }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    drawHUD();
+  }
+
+  function drawHUD() {
+    const p = S.player;
+    // XP bar
+    ctx.fillStyle = '#0a120d'; ctx.fillRect(0, 0, W, 12);
+    ctx.fillStyle = '#7be36b'; ctx.fillRect(0, 0, W * Math.min(1, p.xp / p.xpNext), 12);
+    ctx.font = 'bold 18px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+    const m = Math.floor(S.t / 60), s = Math.floor(S.t % 60).toString().padStart(2, '0');
+    ctx.fillText(`${m}:${s}`, W / 2, 36);
+    ctx.textAlign = 'left'; ctx.font = 'bold 14px system-ui';
+    ctx.fillText(`Lv ${p.level}`, 12, 32);
+    ctx.textAlign = 'right'; ctx.fillText(`☠ ${S.kills}`, W - 12, 32);
+    // HP bar under player
+    const bx = W / 2 - 18, by = H / 2 + 22;
+    ctx.fillStyle = '#400'; ctx.fillRect(bx, by, 36, 5);
+    ctx.fillStyle = '#e33'; ctx.fillRect(bx, by, 36 * Math.max(0, p.hp / p.maxHp), 5);
+    if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, 52); }
+    if (S.paused && document.getElementById('levelup').classList.contains('hidden')) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold 32px system-ui'; ctx.fillText('Paused (P)', W / 2, H / 2);
+    }
+    // Touch joystick
+    if (touch.active) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(touch.sx, touch.sy, 50, 0, 7); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(touch.x, touch.y, 18, 0, 7); ctx.fill();
+    }
+  }
+
+  // ---------- Loop ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (S) {
+      if (S.running && !S.paused) update(dt);
+      draw();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function start() {
+    newGame(); initUpgradeCounts();
+    ['menu', 'gameover', 'levelup'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    last = performance.now();
+  }
+  document.getElementById('startBtn').onclick = start;
+  document.getElementById('restartBtn').onclick = start;
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
