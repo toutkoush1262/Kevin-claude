@@ -127,6 +127,19 @@
   }
 
   // ---------- Upgrades ----------
+  // Mycelium Tendrils per level: branches = how many new enemies each struck enemy branches to,
+  // depth = how many times it branches, maxHits = hard cap on enemies hit per cast (keeps growth from going exponential)
+  const TENDRIL = [null,
+    { branches: 2, depth: 1, maxHits: 3 },
+    { branches: 2, depth: 2, maxHits: 6 },
+    { branches: 3, depth: 2, maxHits: 8 },
+    { branches: 3, depth: 2, maxHits: 10 },
+    { branches: 3, depth: 3, maxHits: 12 },
+    { branches: 4, depth: 3, maxHits: 14 },
+  ];
+  const tendrilDamage = lvl => 12 + lvl * 4;
+  const tendrilCooldown = lvl => 2.2 - lvl * 0.15;
+
   const UPGRADES = [
     { id: 'bolt', name: 'Spore Shot', desc: 'Fires more spore shots, faster.', max: 8,
       apply: p => { p.w.bolt.level++; } },
@@ -134,6 +147,9 @@
       apply: p => { p.w.orbit.level++; } },
     { id: 'aura', name: 'Puffball Cloud', desc: 'A poison spore cloud damages nearby enemies.', max: 6,
       apply: p => { p.w.aura.level++; } },
+    { id: 'tendril', name: 'Mycelium Tendrils', desc: 'A root tendril lashes an enemy, then branches off to strike two more.', max: 6,
+      info: p => { const c = TENDRIL[(p.upgrades.tendril || 0) + 1]; return `${c.branches} branches · ${c.depth} split${c.depth > 1 ? 's' : ''} · up to ${c.maxHits} hits`; },
+      apply: p => { p.w.tendril.level++; } },
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: 6,
       apply: p => { p.w.thorn.level++; } },
     { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
@@ -161,9 +177,10 @@
           orbit: { level: 0, angle: 0, hitCd: new Map() },
           aura: { level: 0, tick: 0 },
           thorn: { level: 0, cd: 0 },
+          tendril: { level: 0, cd: 0 },
         },
       },
-      enemies: [], bullets: [], gems: [], shrooms: [], particles: [], texts: [],
+      enemies: [], bullets: [], tendrils: [], gems: [], shrooms: [], particles: [], texts: [],
       shroomTimer: 10,
     };
   }
@@ -258,6 +275,40 @@
       }
     }
 
+    // Mycelium tendrils: strike the nearest enemy, then branch outward to nearby enemies
+    if (w.tendril.level > 0) {
+      w.tendril.cd -= dt;
+      if (w.tendril.cd <= 0) {
+        const cfg = TENDRIL[w.tendril.level];
+        const first = nearestEnemy(280);
+        if (!first) w.tendril.cd = 0.3;
+        else {
+          w.tendril.cd = tendrilCooldown(w.tendril.level);
+          const dmg = tendrilDamage(w.tendril.level) * p.might;
+          const hit = new Set([first]);
+          S.tendrils.push({ x1: p.x, y1: p.y, x2: first.x, y2: first.y, life: 0.4, seed: Math.random() * 99 });
+          damageEnemy(first, dmg);
+          let frontier = [first];
+          for (let gen = 1; gen <= cfg.depth && hit.size < cfg.maxHits; gen++) {
+            const next = [];
+            for (const src of frontier) {
+              const targets = S.enemies
+                .filter(e => !hit.has(e) && e.hp > 0 && dist2(e, src) < 170 * 170)
+                .sort((a, b) => dist2(a, src) - dist2(b, src))
+                .slice(0, cfg.branches);
+              for (const e of targets) {
+                if (hit.size >= cfg.maxHits) break;
+                hit.add(e); next.push(e);
+                damageEnemy(e, dmg * Math.pow(0.85, gen));
+                S.tendrils.push({ x1: src.x, y1: src.y, x2: e.x, y2: e.y, life: 0.4, seed: Math.random() * 99 });
+              }
+            }
+            frontier = next;
+          }
+        }
+      }
+    }
+
     // Puffball aura: damage over time
     if (w.aura.level > 0) {
       w.aura.tick -= dt;
@@ -286,7 +337,7 @@
       const lvl = p.upgrades[u.id] || 0;
       const div = document.createElement('div');
       div.className = 'card';
-      div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}</small>`;
+      div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>`;
       div.onclick = () => {
         u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
         document.getElementById('levelup').classList.add('hidden');
@@ -398,6 +449,8 @@
     // FX
     for (const q of S.particles) { q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
     S.particles = S.particles.filter(q => q.life > 0);
+    for (const td of S.tendrils) td.life -= dt;
+    S.tendrils = S.tendrils.filter(td => td.life > 0);
     for (const t of S.texts) { t.y -= 30 * dt; t.life -= dt; }
     S.texts = S.texts.filter(t => t.life > 0);
 
@@ -622,6 +675,24 @@
     }
 
     for (const e of S.enemies) drawEnemy(e);
+
+    // Mycelium tendrils: wiggly pale roots with little hairs
+    for (const td of S.tendrils) {
+      const a = Math.min(1, td.life / 0.25), dx = td.x2 - td.x1, dy = td.y2 - td.y1, len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len, segs = Math.max(4, Math.floor(len / 14));
+      const pt = i => { const k = i / segs, wob = (i === 0 || i === segs) ? 0 : Math.sin(k * 9 + td.seed + S.t * 12) * 6 * Math.sin(k * Math.PI); return [td.x1 + dx * k + nx * wob, td.y1 + dy * k + ny * wob]; };
+      ctx.globalAlpha = a; ctx.lineCap = 'round';
+      for (const [wid, col] of [[6, 'rgba(200,255,190,0.25)'], [2.5, '#efe6d0']]) {
+        ctx.strokeStyle = col; ctx.lineWidth = wid; ctx.beginPath();
+        for (let i = 0; i <= segs; i++) { const [x, y] = pt(i); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#d8ccb0'; ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = 1; i < segs; i += 2) { const [x, y] = pt(i), side = i % 4 === 1 ? 1 : -1; ctx.moveTo(x, y); ctx.lineTo(x + nx * 7 * side + dx / len * 4, y + ny * 7 * side + dy / len * 4); }
+      ctx.stroke();
+      ctx.fillStyle = '#f6f0dc'; ctx.beginPath(); ctx.arc(td.x2, td.y2, 3.5, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
     drawPlayer(p);
 
     // Orbiting mushrooms
