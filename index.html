@@ -300,7 +300,8 @@
     for (let i = 0; i < 8; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.5, color: ENEMIES[e.type].color });
     S.gems.push({ x: e.x, y: e.y, v: e.xp, big: e.xp >= 5 });
     if (Math.random() < 0.015) S.shrooms.push({ kind: 'red', x: e.x, y: e.y, life: 30 });
-    if (e.type === 'troll' || Math.random() < 0.025) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8));
+    if (e.type === 'troll') dropCrystal(e.x, e.y, true);
+    else if (Math.random() < 0.025) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8), false);
   }
 
   // ---------- Weapons ----------
@@ -526,7 +527,7 @@
   }
 
   // ---------- Crystals & merchant ----------
-  // weight = share of crystal drops in percent
+  // weight = share of a troll's crystal drop in percent; red and purple only ever come from trolls
   const CRYSTALS = {
     blue:   { color: '#4da6ff', weight: 48, use: 'level up an active skill (costs the new level number in crystals)' },
     green:  { color: '#5ee07a', weight: 48, use: 'level up a passive skill (costs the new level number in crystals)' },
@@ -535,8 +536,8 @@
   };
   const MERCHANT = 'Old Toadley';
 
-  function dropCrystal(x, y) {
-    const kinds = Object.keys(CRYSTALS), total = kinds.reduce((s, k) => s + CRYSTALS[k].weight, 0);
+  function dropCrystal(x, y, fromTroll) {
+    const kinds = Object.keys(CRYSTALS).filter(k => fromTroll || k === 'blue' || k === 'green'), total = kinds.reduce((s, k) => s + CRYSTALS[k].weight, 0);
     let r = Math.random() * total, kind = kinds[0];
     for (const k of kinds) { if ((r -= CRYSTALS[k].weight) <= 0) { kind = k; break; } }
     S.crystals.push({ x, y, kind, bob: Math.random() * 6 });
