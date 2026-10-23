@@ -129,62 +129,84 @@
   }
 
   // ---------- Upgrades ----------
+  const SKILL_MAX = 15;
+
   // Mycelium Tendrils per level: branches = how many new enemies each struck enemy branches to,
   // depth = how many times it branches, maxHits = hard cap on enemies hit per cast (keeps growth from going exponential)
-  const TENDRIL = [null,
-    { branches: 2, depth: 1, maxHits: 3 },
-    { branches: 2, depth: 2, maxHits: 6 },
-    { branches: 3, depth: 2, maxHits: 8 },
-    { branches: 3, depth: 2, maxHits: 10 },
-    { branches: 3, depth: 3, maxHits: 12 },
-    { branches: 4, depth: 3, maxHits: 14 },
-  ];
+  function tendrilBase(lvl) {
+    const early = [null, [2, 1, 3], [2, 2, 6], [3, 2, 8], [3, 2, 10], [3, 3, 12]];
+    const [branches, depth, maxHits] = lvl <= 5 ? early[lvl] : [4, lvl >= 10 ? 4 : 3, 2 + lvl * 2];
+    return { branches, depth, maxHits };
+  }
   const tendrilDamage = lvl => 12 + lvl * 4;
-  const tendrilCooldown = lvl => 2.2 - lvl * 0.15;
-  // Tendril stats for a given level, after any skill modifier
+  const tendrilCooldown = lvl => Math.max(0.6, 2.2 - lvl * 0.1);
+  // Tendril stats for a given level, after any skill modifiers
   function tendrilCfg(p, lvl) {
-    const c = { ...TENDRIL[lvl], dmgMult: 1 };
-    if (p.mods.tendril === 'taproot') { c.depth = 0; c.maxHits = 1; c.dmgMult = 3; }
-    if (p.mods.tendril === 'web') { c.branches += 1; c.depth += 1; c.maxHits = Math.round(c.maxHits * 1.5); c.dmgMult = 0.6; }
+    const c = { ...tendrilBase(lvl), dmgMult: 1 };
+    if (hasMod(p, 'tendril', 'taproot')) { c.depth = 0; c.maxHits = 1; c.dmgMult = 3; }
+    if (hasMod(p, 'tendril', 'web')) { c.branches += 1; c.depth += 1; c.maxHits = Math.round(c.maxHits * 1.5); c.dmgMult = 0.6; }
     return c;
   }
 
-  // Skill modifiers: when a skill reaches level 5, pick one of two that change how it behaves (permanent).
+  // Skill modifiers: at skill levels 5, 10 and 15, pick one of two that change how the skill behaves (permanent).
+  // MODIFIERS[skill][tier] is the pair offered at level (tier + 1) * 5.
   const MODIFIERS = {
     bolt: [
-      { id: 'scatter', name: 'Scattershot', desc: '+2 spore shots in a wide fan, but each deals 30% less damage.' },
-      { id: 'heavy', name: 'Heavy Spore', desc: 'Fires one big spore shot that deals 2.5× damage and pierces 3 more enemies.' },
+      [{ id: 'scatter', name: 'Scattershot', desc: '+2 spore shots in a wide fan, but each deals 30% less damage.' },
+       { id: 'heavy', name: 'Heavy Spore', desc: 'Fires one big spore shot that deals 2.5× damage and pierces 3 more enemies.' }],
+      [{ id: 'burst', name: 'Spore Burst', desc: 'Shots explode on hit, dealing 50% damage to nearby enemies.' },
+       { id: 'rapid', name: 'Rapid Spores', desc: 'Fires 40% faster.' }],
+      [{ id: 'homing', name: 'Seeking Spores', desc: 'Shots curve toward the nearest enemy.' },
+       { id: 'twin', name: 'Twin Volley', desc: 'Also fires a full volley behind you.' }],
     ],
     orbit: [
-      { id: 'wide', name: 'Wide Ring', desc: 'Buddies circle 60% farther out, protecting a bigger area.' },
-      { id: 'frenzy', name: 'Buddy Frenzy', desc: 'Buddies spin twice as fast and hit more often, but deal 25% less damage.' },
+      [{ id: 'wide', name: 'Wide Ring', desc: 'Buddies circle 60% farther out, protecting a bigger area.' },
+       { id: 'frenzy', name: 'Buddy Frenzy', desc: 'Buddies spin twice as fast and hit more often, but deal 25% less damage.' }],
+      [{ id: 'more', name: 'Bring Friends', desc: '+2 mushroom buddies.' },
+       { id: 'bouncy', name: 'Bouncy Caps', desc: 'Buddies knock enemies back 3× as far.' }],
+      [{ id: 'giant', name: 'Giant Buddies', desc: 'Buddies grow huge: bigger hits and +50% damage.' },
+       { id: 'ring2', name: 'Double Ring', desc: 'A second ring of buddies spins the other way, closer to you.' }],
     ],
     aura: [
-      { id: 'fog', name: 'Toxic Fog', desc: 'Cloud is 50% bigger, but deals 30% less damage.' },
-      { id: 'choke', name: 'Choking Spores', desc: 'Enemies inside the cloud are slowed by 50%.' },
+      [{ id: 'fog', name: 'Toxic Fog', desc: 'Cloud is 50% bigger, but deals 30% less damage.' },
+       { id: 'choke', name: 'Choking Spores', desc: 'Enemies inside the cloud are slowed by 50%.' }],
+      [{ id: 'pulse', name: 'Puff Pulse', desc: 'Every 3 seconds the cloud bursts for 6× damage.' },
+       { id: 'feast', name: 'Spore Feast', desc: 'Heal 0.5 HP for each enemy in the cloud (up to 3 HP per tick).' }],
+      [{ id: 'weaken', name: 'Softening Spores', desc: 'Enemies in the cloud take 25% more damage from everything.' },
+       { id: 'rot', name: 'Bursting Rot', desc: 'Enemies that die in the cloud burst, damaging enemies around them.' }],
     ],
     tendril: [
-      { id: 'taproot', name: 'Taproot', desc: 'No splits. One thick tendril hits a single enemy for 3× damage.' },
-      { id: 'web', name: 'Fungal Web', desc: '+1 branch and +1 split (hit cap ×1.5), but every hit deals 40% less damage.' },
+      [{ id: 'taproot', name: 'Taproot', desc: 'No splits. One thick tendril hits a single enemy for 3× damage.' },
+       { id: 'web', name: 'Fungal Web', desc: '+1 branch and +1 split (hit cap ×1.5), but every hit deals 40% less damage.' }],
+      [{ id: 'quick', name: 'Quick Roots', desc: 'Tendrils lash out twice as often.' },
+       { id: 'entangle', name: 'Entangle', desc: 'Enemies hit are rooted in place for 1 second.' }],
+      [{ id: 'leech', name: 'Leech Roots', desc: 'Heal 1 HP for every enemy a tendril hits.' },
+       { id: 'echo', name: 'Echo Strike', desc: 'Every tendril strikes again half a second later for 50% damage.' }],
     ],
     thorn: [
-      { id: 'barrage', name: 'Thorn Barrage', desc: 'Bursts twice as often, but each thorn deals 40% less damage.' },
-      { id: 'bramble', name: 'Bramble Lances', desc: 'Thorns fly 60% farther and pierce 4 more enemies.' },
+      [{ id: 'barrage', name: 'Thorn Barrage', desc: 'Bursts twice as often, but each thorn deals 40% less damage.' },
+       { id: 'bramble', name: 'Bramble Lances', desc: 'Thorns fly 60% farther and pierce 4 more enemies.' }],
+      [{ id: 'poison', name: 'Poison Thorns', desc: 'Thorns poison enemies for 2 seconds of extra damage.' },
+       { id: 'double', name: 'Double Burst', desc: 'A second ring of thorns follows each burst.' }],
+      [{ id: 'splinter', name: 'Splinters', desc: 'Thorns shatter into 2 smaller thorns when they finish.' },
+       { id: 'armor', name: 'Thorn Armor', desc: 'Anything that bites you takes heavy thorn damage.' }],
     ],
   };
   const SKILL_NAMES = { bolt: 'Spore Shot', orbit: 'Mushroom Buddies', aura: 'Puffball Cloud', tendril: 'Mycelium Tendrils', thorn: 'Thorn Nova' };
+  const hasMod = (p, k, id) => (p.mods[k] || []).includes(id);
+  const modTierFor = lvl => (lvl % 5 === 0 ? lvl / 5 - 1 : -1);
 
   const UPGRADES = [
-    { id: 'bolt', name: 'Spore Shot', desc: 'Fires more spore shots, faster.', max: 8,
+    { id: 'bolt', name: 'Spore Shot', desc: 'Fires more spore shots, faster.', max: SKILL_MAX,
       apply: p => { p.w.bolt.level++; } },
-    { id: 'orbit', name: 'Mushroom Buddies', desc: 'Little mushroom friends circle you and bonk hungry foes.', max: 6,
+    { id: 'orbit', name: 'Mushroom Buddies', desc: 'Little mushroom friends circle you and bonk hungry foes.', max: SKILL_MAX,
       apply: p => { p.w.orbit.level++; } },
-    { id: 'aura', name: 'Puffball Cloud', desc: 'A poison spore cloud damages nearby enemies.', max: 6,
+    { id: 'aura', name: 'Puffball Cloud', desc: 'A poison spore cloud damages nearby enemies.', max: SKILL_MAX,
       apply: p => { p.w.aura.level++; } },
-    { id: 'tendril', name: 'Mycelium Tendrils', desc: 'A root tendril lashes an enemy, then branches off to strike two more.', max: 6,
+    { id: 'tendril', name: 'Mycelium Tendrils', desc: 'A root tendril lashes an enemy, then branches off to strike two more.', max: SKILL_MAX,
       info: p => { const c = tendrilCfg(p, (p.upgrades.tendril || 0) + 1); return c.depth === 0 ? `single target · 3× damage` : `${c.branches} branches · ${c.depth} split${c.depth > 1 ? 's' : ''} · up to ${c.maxHits} hits`; },
       apply: p => { p.w.tendril.level++; } },
-    { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: 6,
+    { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
       apply: p => { p.w.thorn.level++; } },
     { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
       apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); } },
@@ -214,7 +236,7 @@
           tendril: { level: 0, cd: 0 },
         },
       },
-      enemies: [], bullets: [], tendrils: [], gems: [], shrooms: [], particles: [], texts: [],
+      enemies: [], bullets: [], tendrils: [], delayed: [], gems: [], shrooms: [], particles: [], texts: [],
       shroomTimer: 10,
     };
   }
@@ -242,12 +264,18 @@
   }
 
   function damageEnemy(e, dmg, kx = 0, ky = 0) {
+    if (e.vuln > 0) dmg *= 1.25;
     e.hp -= dmg; e.flash = 0.1; e.kx += kx; e.ky += ky;
     S.texts.push({ x: e.x, y: e.y - e.r, txt: Math.round(dmg), life: 0.6 });
   }
 
   function killEnemy(e) {
     S.kills++;
+    if (e.rot > 0) { // Bursting Rot
+      const dmg = (3 + S.player.w.aura.level * 2) * S.player.might * 3;
+      for (const o of S.enemies) if (o !== e && o.hp > 0 && dist2(o, e) < 70 * 70) damageEnemy(o, dmg);
+      for (let i = 0; i < 10; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-200, 200), vy: rand(-200, 200), life: 0.4, color: '#b4e05a' });
+    }
     for (let i = 0; i < 8; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.5, color: ENEMIES[e.type].color });
     S.gems.push({ x: e.x, y: e.y, v: e.xp, big: e.xp >= 5 });
     if (Math.random() < 0.015) S.shrooms.push({ kind: 'red', x: e.x, y: e.y, life: 30 });
@@ -260,8 +288,41 @@
     return best;
   }
 
-  const orbitRadius = p => (60 + p.w.orbit.level * 6) * (p.mods.orbit === 'wide' ? 1.6 : 1);
-  const auraRadius = p => (60 + p.w.aura.level * 14) * (p.mods.aura === 'fog' ? 1.5 : 1);
+  const orbitRadius = p => (60 + p.w.orbit.level * 4) * (hasMod(p, 'orbit', 'wide') ? 1.6 : 1);
+  const orbitCount = p => 2 + Math.floor((p.w.orbit.level - 1) / 2) + (hasMod(p, 'orbit', 'more') ? 2 : 0);
+  const orbitSize = p => (hasMod(p, 'orbit', 'giant') ? 2 : 1);
+  const auraRadius = p => (60 + p.w.aura.level * 8) * (hasMod(p, 'aura', 'fog') ? 1.5 : 1);
+  // Buddy positions: outer ring, plus an inner counter-rotating ring with Double Ring
+  function orbitPositions(p) {
+    const o = p.w.orbit, n = orbitCount(p), rad = orbitRadius(p), out = [];
+    for (let i = 0; i < n; i++) { const a = o.angle + (i / n) * Math.PI * 2; out.push({ a, x: p.x + Math.cos(a) * rad, y: p.y + Math.sin(a) * rad }); }
+    if (hasMod(p, 'orbit', 'ring2')) {
+      const m = Math.ceil(n / 2);
+      for (let i = 0; i < m; i++) { const a = -o.angle * 1.3 + (i / m) * Math.PI * 2; out.push({ a, x: p.x + Math.cos(a) * rad * 0.55, y: p.y + Math.sin(a) * rad * 0.55 }); }
+    }
+    return out;
+  }
+  const later = (delay, fn) => S.delayed.push({ t: delay, fn });
+
+  function fireThornRing(p, offset) {
+    const w = p.w.thorn, n = 6 + w.level * 2;
+    const dmg = (6 + w.level * 3) * p.might * (hasMod(p, 'thorn', 'barrage') ? 0.6 : 1);
+    const bramble = hasMod(p, 'thorn', 'bramble');
+    for (let i = 0; i < n; i++) {
+      const a = ((i + offset) / n) * Math.PI * 2;
+      S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, r: 4, dmg, life: bramble ? 1.45 : 0.9, pierce: bramble ? 6 : 2, kind: 'thorn', hit: new Set(),
+        poison: hasMod(p, 'thorn', 'poison'), splinter: hasMod(p, 'thorn', 'splinter') });
+    }
+  }
+
+  function tendrilStrike(x1, y1, e, dmg, thick) {
+    const p = S.player;
+    S.tendrils.push({ x1, y1, x2: e.x, y2: e.y, life: thick ? 0.55 : 0.4, seed: Math.random() * 99, thick });
+    damageEnemy(e, dmg);
+    if (hasMod(p, 'tendril', 'entangle')) e.rooted = 1;
+    if (hasMod(p, 'tendril', 'leech')) p.hp = Math.min(p.maxHp, p.hp + 1);
+    if (hasMod(p, 'tendril', 'echo')) later(0.5, () => { if (e.hp > 0) { S.tendrils.push({ x1, y1, x2: e.x, y2: e.y, life: 0.3, seed: Math.random() * 99, thick }); damageEnemy(e, dmg * 0.5); } });
+  }
 
   function updateWeapons(dt) {
     const p = S.player, w = p.w;
@@ -270,16 +331,17 @@
     if (w.bolt.level > 0) {
       w.bolt.cd -= dt;
       if (w.bolt.cd <= 0) {
-        w.bolt.cd = Math.max(0.25, 0.9 - w.bolt.level * 0.08);
-        const mod = p.mods.bolt;
-        let count = 1 + Math.floor(w.bolt.level / 2), spread = 0.18, dmg = (8 + w.bolt.level * 2) * p.might, pierce = 1 + Math.floor(w.bolt.level / 4), r = 5;
-        if (mod === 'scatter') { count += 2; spread = 0.3; dmg *= 0.7; }
-        if (mod === 'heavy') { count = 1; dmg *= 2.5; pierce += 3; r = 9; }
+        w.bolt.cd = Math.max(0.2, 0.9 - w.bolt.level * 0.05) * (hasMod(p, 'bolt', 'rapid') ? 0.6 : 1);
+        let count = 1 + Math.floor(w.bolt.level / 3), spread = 0.18, dmg = (8 + w.bolt.level * 2) * p.might, pierce = 1 + Math.floor(w.bolt.level / 4), r = 5;
+        if (hasMod(p, 'bolt', 'scatter')) { count += 2; spread = 0.3; dmg *= 0.7; }
+        if (hasMod(p, 'bolt', 'heavy')) { count = 1; dmg *= 2.5; pierce += 3; r = 9; }
         const target = nearestEnemy(500);
         const base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
-        for (let i = 0; i < count; i++) {
-          const a = base + (i - (count - 1) / 2) * spread;
-          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r, dmg, life: 1.4, pierce, kind: 'bolt', hit: new Set() });
+        const volleys = hasMod(p, 'bolt', 'twin') ? [base, base + Math.PI] : [base];
+        for (const dirA of volleys) for (let i = 0; i < count; i++) {
+          const a = dirA + (i - (count - 1) / 2) * spread;
+          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r, dmg, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
+            burst: hasMod(p, 'bolt', 'burst'), homing: hasMod(p, 'bolt', 'homing') });
         }
       }
     }
@@ -288,32 +350,25 @@
     if (w.thorn.level > 0) {
       w.thorn.cd -= dt;
       if (w.thorn.cd <= 0) {
-        const mod = p.mods.thorn;
-        w.thorn.cd = Math.max(1.2, 3 - w.thorn.level * 0.3) * (mod === 'barrage' ? 0.5 : 1);
-        const n = 6 + w.thorn.level * 2;
-        const dmg = (6 + w.thorn.level * 3) * p.might * (mod === 'barrage' ? 0.6 : 1);
-        const life = mod === 'bramble' ? 1.45 : 0.9, pierce = mod === 'bramble' ? 6 : 2;
-        for (let i = 0; i < n; i++) {
-          const a = (i / n) * Math.PI * 2;
-          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, r: 4, dmg, life, pierce, kind: 'thorn', hit: new Set() });
-        }
+        w.thorn.cd = Math.max(0.8, 3 - w.thorn.level * 0.15) * (hasMod(p, 'thorn', 'barrage') ? 0.5 : 1);
+        fireThornRing(p, 0);
+        if (hasMod(p, 'thorn', 'double')) later(0.3, () => fireThornRing(S.player, 0.5));
       }
     }
 
-    // Spore orbit: rotating mushrooms
+    // Mushroom buddies: rotating mushrooms
     if (w.orbit.level > 0) {
-      const mod = p.mods.orbit;
-      w.orbit.angle += dt * (2.2 + w.orbit.level * 0.25) * (mod === 'frenzy' ? 2 : 1);
-      const n = w.orbit.level + 1, rad = orbitRadius(p);
+      const frenzy = hasMod(p, 'orbit', 'frenzy');
+      w.orbit.angle += dt * (2.2 + w.orbit.level * 0.15) * (frenzy ? 2 : 1);
       for (const [e, cd] of w.orbit.hitCd) { if (cd - dt <= 0) w.orbit.hitCd.delete(e); else w.orbit.hitCd.set(e, cd - dt); }
-      for (let i = 0; i < n; i++) {
-        const a = w.orbit.angle + (i / n) * Math.PI * 2;
-        const ox = p.x + Math.cos(a) * rad, oy = p.y + Math.sin(a) * rad;
+      const hitR = 12 * orbitSize(p), knock = 150 * (hasMod(p, 'orbit', 'bouncy') ? 3 : 1);
+      const dmg = (10 + w.orbit.level * 4) * p.might * (frenzy ? 0.75 : 1) * (hasMod(p, 'orbit', 'giant') ? 1.5 : 1);
+      for (const b of orbitPositions(p)) {
         for (const e of S.enemies) {
           if (w.orbit.hitCd.has(e)) continue;
-          if ((e.x - ox) ** 2 + (e.y - oy) ** 2 < (e.r + 12) ** 2) {
-            damageEnemy(e, (10 + w.orbit.level * 4) * p.might * (mod === 'frenzy' ? 0.75 : 1), Math.cos(a) * 150, Math.sin(a) * 150);
-            w.orbit.hitCd.set(e, mod === 'frenzy' ? 0.2 : 0.4);
+          if ((e.x - b.x) ** 2 + (e.y - b.y) ** 2 < (e.r + hitR) ** 2) {
+            damageEnemy(e, dmg, Math.cos(b.a) * knock, Math.sin(b.a) * knock);
+            w.orbit.hitCd.set(e, frenzy ? 0.2 : 0.4);
           }
         }
       }
@@ -323,15 +378,14 @@
     if (w.tendril.level > 0) {
       w.tendril.cd -= dt;
       if (w.tendril.cd <= 0) {
-        const cfg = tendrilCfg(p, w.tendril.level), thick = p.mods.tendril === 'taproot';
+        const cfg = tendrilCfg(p, w.tendril.level), thick = hasMod(p, 'tendril', 'taproot');
         const first = nearestEnemy(280);
         if (!first) w.tendril.cd = 0.3;
         else {
-          w.tendril.cd = tendrilCooldown(w.tendril.level);
+          w.tendril.cd = tendrilCooldown(w.tendril.level) * (hasMod(p, 'tendril', 'quick') ? 0.5 : 1);
           const dmg = tendrilDamage(w.tendril.level) * p.might * cfg.dmgMult;
           const hit = new Set([first]);
-          S.tendrils.push({ x1: p.x, y1: p.y, x2: first.x, y2: first.y, life: thick ? 0.55 : 0.4, seed: Math.random() * 99, thick });
-          damageEnemy(first, dmg);
+          tendrilStrike(p.x, p.y, first, dmg, thick);
           let frontier = [first];
           for (let gen = 1; gen <= cfg.depth && hit.size < cfg.maxHits; gen++) {
             const next = [];
@@ -343,8 +397,7 @@
               for (const e of targets) {
                 if (hit.size >= cfg.maxHits) break;
                 hit.add(e); next.push(e);
-                damageEnemy(e, dmg * Math.pow(0.85, gen));
-                S.tendrils.push({ x1: src.x, y1: src.y, x2: e.x, y2: e.y, life: 0.4, seed: Math.random() * 99 });
+                tendrilStrike(src.x, src.y, e, dmg * Math.pow(0.85, gen), thick);
               }
             }
             frontier = next;
@@ -353,18 +406,26 @@
       }
     }
 
-    // Puffball aura: damage over time
+    // Puffball cloud: damage over time
     if (w.aura.level > 0) {
       w.aura.tick -= dt;
+      w.aura.pulse = (w.aura.pulse || 0) - dt;
       if (w.aura.tick <= 0) {
         w.aura.tick = 0.5;
-        const rad = auraRadius(p), mod = p.mods.aura;
+        const pulse = hasMod(p, 'aura', 'pulse') && w.aura.pulse <= 0;
+        if (pulse) { w.aura.pulse = 3; w.aura.flash = 0.3; }
+        const rad = auraRadius(p);
+        let inside = 0;
         for (const e of S.enemies) {
           if (dist2(e, p) < (rad + e.r) ** 2) {
-            damageEnemy(e, (3 + w.aura.level * 2) * p.might * (mod === 'fog' ? 0.7 : 1));
-            if (mod === 'choke') e.slow = 0.6;
+            inside++;
+            if (hasMod(p, 'aura', 'choke')) e.slow = 0.6;
+            if (hasMod(p, 'aura', 'weaken')) e.vuln = 0.6;
+            if (hasMod(p, 'aura', 'rot')) e.rot = 0.6;
+            damageEnemy(e, (3 + w.aura.level * 2) * p.might * (hasMod(p, 'aura', 'fog') ? 0.7 : 1) * (pulse ? 6 : 1));
           }
         }
+        if (hasMod(p, 'aura', 'feast')) p.hp = Math.min(p.maxHp, p.hp + Math.min(3, inside * 0.5));
       }
     }
   }
@@ -385,11 +446,11 @@
       const lvl = p.upgrades[u.id] || 0;
       const div = document.createElement('div');
       div.className = 'card';
-      const modNext = MODIFIERS[u.id] && (lvl + 1) % 5 === 0 && !p.mods[u.id];
+      const tier = MODIFIERS[u.id] ? modTierFor(lvl + 1) : -1, modNext = tier >= 0 && MODIFIERS[u.id][tier];
       div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>${modNext ? '<small style="color:#c9a8ff">✦ Unlocks a skill modifier choice</small>' : ''}`;
       div.onclick = () => {
         u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
-        if (modNext) return showModifierChoice(u.id);
+        if (modNext) return showModifierChoice(u.id, tier);
         document.getElementById('levelup').classList.add('hidden');
         S.paused = false;
         if (p.xp >= p.xpNext) levelUp();
@@ -398,18 +459,18 @@
     }
     document.getElementById('levelup').classList.remove('hidden');
   }
-  // Shown right after a skill reaches level 5: pick one of its two modifiers
-  function showModifierChoice(k) {
+  // Shown right after a skill reaches level 5, 10 or 15: pick one of that tier's two modifiers
+  function showModifierChoice(k, tier) {
     const p = S.player;
     document.getElementById('levelTitle').textContent = `${SKILL_NAMES[k]} reached level ${p.w[k].level}! Choose a modifier`;
     const cards = document.getElementById('cards');
     cards.innerHTML = '';
-    for (const m of MODIFIERS[k]) {
+    for (const m of MODIFIERS[k][tier]) {
       const div = document.createElement('div');
       div.className = 'card mod';
       div.innerHTML = `<b>${m.name}</b><span>${m.desc}</span><small>Permanent modifier for ${SKILL_NAMES[k]}</small>`;
       div.onclick = () => {
-        p.mods[k] = m.id;
+        (p.mods[k] = p.mods[k] || []).push(m.id);
         document.getElementById('levelup').classList.add('hidden');
         S.paused = false;
         if (p.xp >= p.xpNext) levelUp();
@@ -456,13 +517,15 @@
       const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
       let sx = dx / d, sy = dy / d;
       if (e.type === 'bat' || e.type === 'pixie') { e.phase += dt * 6; sx += Math.cos(e.phase) * 0.5; sy += Math.sin(e.phase) * 0.5; }
-      const spd = e.speed * (e.slow > 0 ? 0.5 : 1);
-      if (e.slow > 0) e.slow -= dt;
+      const spd = e.rooted > 0 ? 0 : e.speed * (e.slow > 0 ? 0.5 : 1);
+      for (const k of ['slow', 'rooted', 'vuln', 'rot']) if (e[k] > 0) e[k] -= dt;
+      if (e.poison > 0) { e.poison -= dt; e.hp -= e.poisonDps * dt; }
       e.x += sx * spd * dt + e.kx * dt; e.y += sy * spd * dt + e.ky * dt;
       e.kx *= 0.85; e.ky *= 0.85;
       e.flash = Math.max(0, e.flash - dt);
       if (d < e.r + p.r && p.hurt <= 0) {
         p.hp -= e.dmg; p.hurt = 0.5;
+        if (hasMod(p, 'thorn', 'armor')) damageEnemy(e, (6 + p.w.thorn.level * 3) * p.might * 4, -dx / d * 300, -dy / d * 300);
         S.texts.push({ x: p.x + rand(-12, 12), y: p.y - 24, txt: ['CHOMP!', 'NOM!', 'MUNCH!', 'Yum!'][Math.floor(Math.random() * 4)], life: 0.8, color: '#ffcf6b' });
         for (let i = 0; i < 5; i++) S.particles.push({ x: p.x, y: p.y - 8, vx: rand(-90, 90), vy: rand(-140, -20), life: 0.4, color: '#efe3c8' });
         if (p.hp <= 0) return gameOver();
@@ -480,17 +543,38 @@
     }
 
     // Bullets
+    const spawned = [];
     for (const b of S.bullets) {
+      if (b.homing) { // Seeking Spores: steer toward the closest enemy
+        let best = null, bd = 250 * 250;
+        for (const e of S.enemies) { const d = dist2(e, b); if (d < bd && !b.hit.has(e)) { bd = d; best = e; } }
+        if (best) {
+          const sp = Math.hypot(b.vx, b.vy), cur = Math.atan2(b.vy, b.vx), want = Math.atan2(best.y - b.y, best.x - b.x);
+          const diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur)), a = cur + Math.max(-5 * dt, Math.min(5 * dt, diff));
+          b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+        }
+      }
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       for (const e of S.enemies) {
         if (b.pierce <= 0 || b.hit.has(e)) continue;
         if (dist2(b, e) < (b.r + e.r) ** 2) {
           damageEnemy(e, b.dmg, b.vx * 0.3, b.vy * 0.3); b.hit.add(e); b.pierce--;
+          if (b.poison) { e.poison = 2; e.poisonDps = b.dmg * 0.4; }
+          if (b.burst) {
+            for (const o of S.enemies) if (o !== e && dist2(o, e) < 60 * 60) damageEnemy(o, b.dmg * 0.5);
+            for (let i = 0; i < 6; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-150, 150), vy: rand(-150, 150), life: 0.3, color: '#d9a6ff' });
+          }
         }
       }
       if (b.pierce <= 0) b.life = 0;
+      if (b.life <= 0 && b.splinter) { // Splinters: shatter into 2 smaller thorns
+        const a = Math.atan2(b.vy, b.vx);
+        for (const off of [-0.6, 0.6]) spawned.push({ ...b, vx: Math.cos(a + off) * 260, vy: Math.sin(a + off) * 260, r: 3, dmg: b.dmg * 0.5, life: 0.5, pierce: 1, splinter: false, hit: new Set(), small: true });
+      }
     }
-    S.bullets = S.bullets.filter(b => b.life > 0);
+    S.bullets = S.bullets.filter(b => b.life > 0).concat(spawned);
+    for (const d of S.delayed) { d.t -= dt; if (d.t <= 0) d.fn(); }
+    S.delayed = S.delayed.filter(d => d.t > 0);
 
     // Deaths
     S.enemies = S.enemies.filter(e => { if (e.hp <= 0) { killEnemy(e); return false; } return true; });
@@ -724,7 +808,8 @@
     // Aura
     if (p.w.aura.level > 0) {
       const rad = auraRadius(p);
-      ctx.fillStyle = `rgba(${p.mods.aura === 'choke' ? '150, 120, 200' : '170, 220, 90'}, ${0.12 + Math.sin(S.t * 4) * 0.03})`;
+      if (p.w.aura.flash > 0) { p.w.aura.flash -= 1 / 60; ctx.fillStyle = `rgba(220, 255, 140, ${p.w.aura.flash})`; ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill(); }
+      ctx.fillStyle = `rgba(${hasMod(p, 'aura', 'choke') ? '150, 120, 200' : '170, 220, 90'}, ${0.12 + Math.sin(S.t * 4) * 0.03})`;
       ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
       ctx.fillStyle = 'rgba(200,240,120,0.35)';
       for (let i = 0; i < 10; i++) { const a = S.t * 0.7 + i * 0.63, rr = rad * (0.4 + 0.5 * ((i * 0.37 + S.t * 0.2) % 1)); ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * rr, p.y + Math.sin(a) * rr, 3, 0, 7); ctx.fill(); }
@@ -771,11 +856,8 @@
 
     // Orbiting mushrooms
     if (p.w.orbit.level > 0) {
-      const n = p.w.orbit.level + 1, rad = orbitRadius(p);
-      for (let i = 0; i < n; i++) {
-        const a = p.w.orbit.angle + (i / n) * Math.PI * 2;
-        drawMushroom(p.x + Math.cos(a) * rad, p.y + Math.sin(a) * rad + 8, 18, '#c25bff', '#f3d4ff');
-      }
+      const size = 18 * orbitSize(p);
+      for (const b of orbitPositions(p)) drawMushroom(b.x, b.y + size * 0.45, size, '#c25bff', '#f3d4ff');
     }
 
     // Bullets
@@ -819,7 +901,7 @@
     let hy = 52;
     if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, hy); hy += 18; }
     ctx.textAlign = 'left'; ctx.fillStyle = '#c9a8ff'; ctx.font = '12px system-ui';
-    for (const k in p.mods) { ctx.fillText('✦ ' + MODIFIERS[k].find(m => m.id === p.mods[k]).name, 12, hy); hy += 16; }
+    for (const k in p.mods) p.mods[k].forEach((id, t) => { ctx.fillText('✦ ' + MODIFIERS[k][t].find(m => m.id === id).name, 12, hy); hy += 16; });
     if (S.paused && document.getElementById('levelup').classList.contains('hidden')) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold 32px system-ui'; ctx.fillText('Paused (P)', W / 2, H / 2);
