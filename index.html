@@ -29,6 +29,19 @@
   .card b { display: block; color: #ffe08a; margin-bottom: 6px; font-size: 17px; }
   .card span { font-size: 14px; color: #cfd8cf; }
   .card small { display: block; margin-top: 8px; color: #8fb39a; }
+  .shop { background: #16201a; border: 2px solid #3f5a48; border-radius: 12px; padding: 16px; width: min(560px, 100%); max-height: 92vh; overflow: auto; box-sizing: border-box; text-align: left; }
+  .shop h2 { text-align: center; }
+  .wallet { display: flex; gap: 16px; justify-content: center; font-weight: 700; font-size: 18px; }
+  .legend { font-size: 13px; color: #a9bfae; margin: 10px 0; line-height: 1.6; }
+  .shopmsg { text-align: center; color: #ffe08a; min-height: 1.4em; margin: 6px 0; }
+  .ssec { color: #ffe08a; font-weight: 700; margin: 12px 0 4px; }
+  .srow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid #26362c; }
+  .sname small { display: block; color: #8fb39a; font-size: 12px; }
+  .sbtns { display: flex; gap: 6px; flex-shrink: 0; }
+  .cbtn { font-size: 13px; padding: 6px 10px; margin: 0; background: var(--c); color: #111; border-radius: 6px; }
+  .cbtn:hover { background: var(--c); filter: brightness(1.15); }
+  .cbtn:disabled { opacity: 0.25; cursor: default; filter: none; }
+  #shopClose { display: block; margin: 14px auto 0; }
   .card.mod { border-color: #8a5cc2; background: #241d33; }
   .card.mod:hover { border-color: #ffe08a; background: #2e2542; }
 </style>
@@ -51,6 +64,14 @@
 <div id="levelup" class="overlay hidden">
   <h2 id="levelTitle">Level up! Choose a blessing</h2>
   <div id="cards" class="cards"></div>
+</div>
+
+<div id="shop" class="overlay hidden">
+  <div class="shop">
+    <h2>🐸 Old Toadley's Crystal Shop</h2>
+    <div id="shopBody"></div>
+    <button id="shopClose">Leave shop</button>
+  </div>
 </div>
 
 <div id="gameover" class="overlay hidden">
@@ -198,26 +219,26 @@
 
   const UPGRADES = [
     { id: 'bolt', name: 'Spore Shot', desc: 'Fires more spore shots, faster.', max: SKILL_MAX,
-      apply: p => { p.w.bolt.level++; } },
+      type: 'active', apply: p => { p.w.bolt.level++; }, remove: p => { p.w.bolt.level--; } },
     { id: 'orbit', name: 'Mushroom Buddies', desc: 'Little mushroom friends circle you and bonk hungry foes.', max: SKILL_MAX,
-      apply: p => { p.w.orbit.level++; } },
+      type: 'active', apply: p => { p.w.orbit.level++; }, remove: p => { p.w.orbit.level--; } },
     { id: 'aura', name: 'Puffball Cloud', desc: 'A poison spore cloud damages nearby enemies.', max: SKILL_MAX,
-      apply: p => { p.w.aura.level++; } },
+      type: 'active', apply: p => { p.w.aura.level++; }, remove: p => { p.w.aura.level--; } },
     { id: 'tendril', name: 'Mycelium Tendrils', desc: 'A root tendril lashes an enemy, then branches off to strike two more.', max: SKILL_MAX,
       info: p => { const c = tendrilCfg(p, (p.upgrades.tendril || 0) + 1); return c.depth === 0 ? `single target · 3× damage` : `${c.branches} branches · ${c.depth} split${c.depth > 1 ? 's' : ''} · up to ${c.maxHits} hits`; },
-      apply: p => { p.w.tendril.level++; } },
+      type: 'active', apply: p => { p.w.tendril.level++; }, remove: p => { p.w.tendril.level--; } },
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
-      apply: p => { p.w.thorn.level++; } },
+      type: 'active', apply: p => { p.w.thorn.level++; }, remove: p => { p.w.thorn.level--; } },
     { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
-      apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); } },
+      type: 'passive', apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); }, remove: p => { p.maxHp -= 20; p.hp = Math.min(p.hp, p.maxHp); } },
     { id: 'speed', name: 'Speedy Roots', desc: '+10% movement speed.', max: 5,
-      apply: p => { p.speed *= 1.1; } },
+      type: 'passive', apply: p => { p.speed *= 1.1; }, remove: p => { p.speed /= 1.1; } },
     { id: 'might', name: 'Toxic Gills', desc: '+15% damage for all attacks.', max: 6,
-      apply: p => { p.might *= 1.15; } },
+      type: 'passive', apply: p => { p.might *= 1.15; }, remove: p => { p.might /= 1.15; } },
     { id: 'magnet', name: 'Mycelium Net', desc: '+40% spore pickup range.', max: 4,
-      apply: p => { p.magnet *= 1.4; } },
+      type: 'passive', apply: p => { p.magnet *= 1.4; }, remove: p => { p.magnet /= 1.4; } },
     { id: 'regen', name: 'Regrowth', desc: 'Regrow 0.5 HP per second.', max: 5,
-      apply: p => { p.regen += 0.5; } },
+      type: 'passive', apply: p => { p.regen += 0.5; }, remove: p => { p.regen -= 0.5; } },
   ];
 
   // ---------- State ----------
@@ -227,7 +248,7 @@
       t: 0, kills: 0, running: true, paused: false, spawnAcc: 0,
       player: {
         x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0,
-        level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {}, mods: {},
+        level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {}, mods: {}, crystals: { blue: 0, green: 0, red: 0, purple: 0 },
         w: {
           bolt: { level: 1, cd: 0 },
           orbit: { level: 0, angle: 0, hitCd: new Map() },
@@ -236,7 +257,7 @@
           tendril: { level: 0, cd: 0 },
         },
       },
-      enemies: [], bullets: [], tendrils: [], delayed: [], gems: [], shrooms: [], particles: [], texts: [],
+      enemies: [], bullets: [], tendrils: [], delayed: [], crystals: [], merchant: null, banner: null, gems: [], shrooms: [], particles: [], texts: [],
       shroomTimer: 10,
     };
   }
@@ -279,6 +300,7 @@
     for (let i = 0; i < 8; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.5, color: ENEMIES[e.type].color });
     S.gems.push({ x: e.x, y: e.y, v: e.xp, big: e.xp >= 5 });
     if (Math.random() < 0.015) S.shrooms.push({ kind: 'red', x: e.x, y: e.y, life: 30 });
+    if (e.type === 'troll' || Math.random() < 0.025) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8));
   }
 
   // ---------- Weapons ----------
@@ -431,9 +453,36 @@
   }
 
   // ---------- Level up ----------
+  const menuOpen = () => !document.getElementById('levelup').classList.contains('hidden') || !document.getElementById('shop').classList.contains('hidden');
+
+  // Adds one level to a skill; returns the modifier tier it just unlocked, or -1
+  function gainLevel(u) {
+    const p = S.player;
+    u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
+    const tier = MODIFIERS[u.id] ? modTierFor(p.upgrades[u.id]) : -1;
+    return tier >= 0 && MODIFIERS[u.id][tier] && (p.mods[u.id] || []).length === tier ? tier : -1;
+  }
+  // Removes one level from a skill, dropping any modifier whose level is no longer reached; returns lost modifier names
+  function loseLevel(u) {
+    const p = S.player;
+    u.remove(p); p.upgrades[u.id]--;
+    const mods = p.mods[u.id] || [], keep = Math.floor(p.upgrades[u.id] / 5);
+    const lost = mods.slice(keep).map((id, i) => MODIFIERS[u.id][keep + i].find(m => m.id === id).name);
+    if (mods.length) p.mods[u.id] = mods.slice(0, keep);
+    return lost;
+  }
+
+  function resumeGame() {
+    const p = S.player;
+    document.getElementById('levelup').classList.add('hidden');
+    S.paused = false;
+    if (p.xp >= p.xpNext) levelUp();
+  }
+
   function levelUp() {
     const p = S.player;
     p.level++; p.xp -= p.xpNext; p.xpNext = Math.floor(p.xpNext * 1.3 + 4);
+    if (p.level % 10 === 0) spawnMerchant();
     S.paused = true;
     document.getElementById('levelTitle').textContent = 'Level up! Choose a blessing';
     const pool = UPGRADES.filter(u => (p.upgrades[u.id] || 0) < u.max);
@@ -449,18 +498,15 @@
       const tier = MODIFIERS[u.id] ? modTierFor(lvl + 1) : -1, modNext = tier >= 0 && MODIFIERS[u.id][tier];
       div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>${modNext ? '<small style="color:#c9a8ff">✦ Unlocks a skill modifier choice</small>' : ''}`;
       div.onclick = () => {
-        u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
-        if (modNext) return showModifierChoice(u.id, tier);
-        document.getElementById('levelup').classList.add('hidden');
-        S.paused = false;
-        if (p.xp >= p.xpNext) levelUp();
+        const t = gainLevel(u);
+        if (t >= 0) showModifierChoice(u.id, t, resumeGame); else resumeGame();
       };
       cards.appendChild(div);
     }
     document.getElementById('levelup').classList.remove('hidden');
   }
-  // Shown right after a skill reaches level 5, 10 or 15: pick one of that tier's two modifiers
-  function showModifierChoice(k, tier) {
+  // Shown right after a skill reaches level 5, 10 or 15: pick one of that tier's two modifiers, then onDone()
+  function showModifierChoice(k, tier, onDone) {
     const p = S.player;
     document.getElementById('levelTitle').textContent = `${SKILL_NAMES[k]} reached level ${p.w[k].level}! Choose a modifier`;
     const cards = document.getElementById('cards');
@@ -472,19 +518,101 @@
       div.onclick = () => {
         (p.mods[k] = p.mods[k] || []).push(m.id);
         document.getElementById('levelup').classList.add('hidden');
-        S.paused = false;
-        if (p.xp >= p.xpNext) levelUp();
+        onDone();
       };
       cards.appendChild(div);
     }
     document.getElementById('levelup').classList.remove('hidden');
   }
 
+  // ---------- Crystals & merchant ----------
+  const CRYSTALS = {
+    blue:   { color: '#4da6ff', weight: 3, use: 'level up an active skill' },
+    green:  { color: '#5ee07a', weight: 3, use: 'level up a passive skill' },
+    red:    { color: '#ff4d5e', weight: 3, use: 'take a level from one skill and give it to a random other skill' },
+    purple: { color: '#b36bff', weight: 1, use: 'level up any skill' },
+  };
+  const MERCHANT = 'Old Toadley';
+
+  function dropCrystal(x, y) {
+    const kinds = Object.keys(CRYSTALS), total = kinds.reduce((s, k) => s + CRYSTALS[k].weight, 0);
+    let r = Math.random() * total, kind = kinds[0];
+    for (const k of kinds) { if ((r -= CRYSTALS[k].weight) <= 0) { kind = k; break; } }
+    S.crystals.push({ x, y, kind, bob: Math.random() * 6 });
+  }
+
+  function spawnMerchant() {
+    const p = S.player, a = Math.random() * Math.PI * 2;
+    S.merchant = { x: p.x + Math.cos(a) * 280, y: p.y + Math.sin(a) * 280, life: 60 };
+    S.banner = { txt: `🐸 ${MERCHANT} the crystal merchant has arrived! Follow the arrow.`, life: 5 };
+  }
+
+  function openShop(msg = '') {
+    S.paused = true;
+    renderShop(msg);
+    document.getElementById('shop').classList.remove('hidden');
+  }
+  function closeShop() {
+    document.getElementById('shop').classList.add('hidden');
+    S.merchant = null;
+    S.banner = { txt: `${MERCHANT} hops away. See you in 10 levels!`, life: 3 };
+    resumeGame();
+  }
+
+  function renderShop(msg) {
+    const p = S.player, c = p.crystals;
+    const gem = k => `<span style="color:${CRYSTALS[k].color}">◆</span>`;
+    const btn = (kind, act, id, disabled, label, title) =>
+      `<button class="cbtn" style="--c:${CRYSTALS[kind].color}" data-act="${act}" data-id="${id}" data-kind="${kind}" title="${title}" ${disabled ? 'disabled' : ''}>${label}</button>`;
+    const row = u => {
+      const lvl = p.upgrades[u.id] || 0, maxed = lvl >= u.max, lk = u.type === 'active' ? 'blue' : 'green';
+      return `<div class="srow"><div class="sname">${u.name}<small>${lvl === 0 ? 'Not learned' : `Lv ${lvl} / ${u.max}`}${maxed ? ' · MAX' : ''}</small></div><div class="sbtns">
+        ${btn(lk, 'up', u.id, maxed || !c[lk], '+1', `Spend a ${lk} crystal: +1 level`)}
+        ${btn('purple', 'up', u.id, maxed || !c.purple, '+1', 'Spend a purple crystal: +1 level')}
+        ${btn('red', 'swap', u.id, lvl === 0 || !c.red, 'Swap', 'Spend a red crystal: -1 level here, +1 level to a random other skill')}
+      </div></div>`;
+    };
+    document.getElementById('shopBody').innerHTML = `
+      <div class="wallet">${Object.keys(CRYSTALS).map(k => `<span>${gem(k)} ${c[k]}</span>`).join('')}</div>
+      <div class="legend">${Object.keys(CRYSTALS).map(k => `${gem(k)} ${k[0].toUpperCase() + k.slice(1)}: ${CRYSTALS[k].use}`).join('<br>')}</div>
+      <div class="shopmsg">${msg}</div>
+      <div class="ssec">Active skills</div>${UPGRADES.filter(u => u.type === 'active').map(row).join('')}
+      <div class="ssec">Passive skills</div>${UPGRADES.filter(u => u.type === 'passive').map(row).join('')}`;
+  }
+
+  function shopAction(act, id, kind) {
+    const p = S.player, u = UPGRADES.find(x => x.id === id);
+    let msg, target = u;
+    if (act === 'up') {
+      msg = `${u.name} → level ${(p.upgrades[id] || 0) + 1}!`;
+    } else {
+      // Red crystal: prefer skills you already have, fall back to any skill with room to grow
+      const room = o => o !== u && (p.upgrades[o.id] || 0) < o.max;
+      const owned = UPGRADES.filter(o => room(o) && (p.upgrades[o.id] || 0) > 0);
+      const options = owned.length ? owned : UPGRADES.filter(room);
+      if (!options.length) return renderShop('Every other skill is already maxed!');
+      target = options[Math.floor(Math.random() * options.length)];
+      const lost = loseLevel(u);
+      msg = `${u.name} −1 → ${target.name} +1!${lost.length ? ` (lost modifier: ${lost.join(', ')})` : ''}`;
+    }
+    p.crystals[kind]--;
+    const tier = gainLevel(target);
+    if (tier >= 0) {
+      document.getElementById('shop').classList.add('hidden');
+      showModifierChoice(target.id, tier, () => openShop(msg));
+    } else renderShop(msg);
+  }
+  document.getElementById('shopBody').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]');
+    if (b && !b.disabled) shopAction(b.dataset.act, b.dataset.id, b.dataset.kind);
+  });
+  document.getElementById('shopClose').onclick = closeShop;
+
   // Bolt starts at level 1 already
   function initUpgradeCounts() { S.player.upgrades.bolt = 1; }
 
   function togglePause() {
-    if (!S || !S.running || !document.getElementById('levelup').classList.contains('hidden')) return;
+    if (!S || !S.running || menuOpen()) return;
     S.paused = !S.paused;
   }
 
@@ -591,6 +719,22 @@
     S.gems = S.gems.filter(g => !g.taken);
     if (S.gems.length > 600) S.gems.splice(0, S.gems.length - 600);
 
+    // Crystals
+    for (const c of S.crystals) {
+      const d = Math.sqrt(dist2(c, p));
+      if (c.pull || d < p.magnet) { const s = Math.max(250, 600 - d) * dt; c.x += (p.x - c.x) / (d || 1) * s; c.y += (p.y - c.y) / (d || 1) * s; }
+      if (d < p.r + 8) { c.taken = true; p.crystals[c.kind]++; S.texts.push({ x: p.x, y: p.y - 34, txt: `+1 ${c.kind} crystal`, life: 1, color: CRYSTALS[c.kind].color }); }
+    }
+    S.crystals = S.crystals.filter(c => !c.taken);
+
+    // Merchant
+    if (S.merchant) {
+      S.merchant.life -= dt;
+      if (S.merchant.life <= 0) { S.merchant = null; S.banner = { txt: `${MERCHANT} got tired of waiting and hopped away.`, life: 3 }; }
+      else if (dist2(S.merchant, p) < (p.r + 24) ** 2) return openShop(`"Ribbit! Crystals for power, little mushroom?"`);
+    }
+    if (S.banner && (S.banner.life -= dt) <= 0) S.banner = null;
+
     // Magic mushrooms
     for (const m of S.shrooms) {
       m.life -= dt;
@@ -598,7 +742,7 @@
         m.life = 0;
         if (m.kind === 'red') { p.hp = Math.min(p.maxHp, p.hp + 30); S.texts.push({ x: p.x, y: p.y - 30, txt: '+30 HP', life: 1, color: '#ff8a8a' }); }
         if (m.kind === 'blue') { p.speedBoost = 8; S.texts.push({ x: p.x, y: p.y - 30, txt: 'Speed!', life: 1, color: '#6bc7ff' }); }
-        if (m.kind === 'gold') { S.gems.forEach(g => g.pull = true); S.texts.push({ x: p.x, y: p.y - 30, txt: 'Spore storm!', life: 1, color: '#ffd84a' }); }
+        if (m.kind === 'gold') { S.gems.forEach(g => g.pull = true); S.crystals.forEach(c => c.pull = true); S.texts.push({ x: p.x, y: p.y - 30, txt: 'Spore storm!', life: 1, color: '#ffd84a' }); }
       }
     }
     S.shrooms = S.shrooms.filter(m => m.life > 0);
@@ -852,6 +996,8 @@
       ctx.fillStyle = '#f6f0dc'; ctx.beginPath(); ctx.arc(td.x2, td.y2, 3.5, 0, 7); ctx.fill();
     }
     ctx.globalAlpha = 1;
+    for (const c of S.crystals) drawCrystal(c.x, c.y + Math.sin(S.t * 3 + c.bob) * 2, 7, CRYSTALS[c.kind].color);
+    if (S.merchant) drawMerchant(S.merchant);
     drawPlayer(p);
 
     // Orbiting mushrooms
@@ -883,6 +1029,38 @@
     drawHUD();
   }
 
+  function drawCrystal(x, y, s, col) {
+    ctx.shadowColor = col; ctx.shadowBlur = 12; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(x, y - s * 1.3); ctx.lineTo(x + s * 0.8, y); ctx.lineTo(x, y + s * 1.1); ctx.lineTo(x - s * 0.8, y); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath(); ctx.moveTo(x, y - s * 1.3); ctx.lineTo(x + s * 0.3, y - s * 0.2); ctx.lineTo(x - s * 0.3, y - s * 0.2); ctx.closePath(); ctx.fill();
+  }
+
+  function drawMerchant(m) {
+    ctx.save(); ctx.translate(m.x, m.y);
+    const hop = Math.abs(Math.sin(S.t * 3)) * 3;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 18, 20, 5, 0, 0, 7); ctx.fill();
+    ctx.translate(0, -hop);
+    // backpack stuffed with crystals
+    ctx.fillStyle = '#7a5230'; ctx.fillRect(-24, -14, 14, 26);
+    drawCrystal(-20, -18, 4, CRYSTALS.blue.color); drawCrystal(-14, -20, 4, CRYSTALS.purple.color);
+    // toad body and head
+    ctx.fillStyle = '#5c9a4a'; ctx.beginPath(); ctx.ellipse(0, 6, 18, 13, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#d8e8a8'; ctx.beginPath(); ctx.ellipse(0, 9, 11, 8, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#5c9a4a'; ctx.beginPath(); ctx.arc(-7, -8, 6, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(7, -8, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-7, -9, 3.5, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(7, -9, 3.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(-6.5, -9, 1.8, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(7.5, -9, 1.8, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2e4a24'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, -2, 8, 0.2, Math.PI - 0.2); ctx.stroke();
+    // little hat
+    ctx.fillStyle = '#6b3fa0'; ctx.fillRect(-8, -16, 16, 3); ctx.fillRect(-5, -24, 10, 8);
+    // lantern
+    ctx.strokeStyle = '#555'; ctx.beginPath(); ctx.moveTo(18, 2); ctx.lineTo(22, -8); ctx.stroke();
+    ctx.fillStyle = '#ffd84a'; ctx.shadowColor = '#ffd84a'; ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(22, -10, 3.5, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffe08a'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(`SHOP · ${Math.ceil(m.life)}s`, 0, -32 - Math.sin(S.t * 4) * 2);
+    ctx.restore();
+  }
+
   function drawHUD() {
     const p = S.player;
     // XP bar
@@ -894,6 +1072,29 @@
     ctx.textAlign = 'left'; ctx.font = 'bold 14px system-ui';
     ctx.fillText(`Lv ${p.level}`, 12, 32);
     ctx.textAlign = 'right'; ctx.fillText(`☠ ${S.kills}`, W - 12, 32);
+    // crystal wallet
+    let cx = W - 14;
+    for (const k of ['purple', 'red', 'green', 'blue']) {
+      ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui';
+      ctx.fillText(p.crystals[k], cx, 56); cx -= ctx.measureText(String(p.crystals[k])).width + 12;
+      drawCrystal(cx + 4, 51, 5, CRYSTALS[k].color); cx -= 12;
+    }
+    if (S.banner) {
+      ctx.globalAlpha = Math.min(1, S.banner.life); ctx.textAlign = 'center'; ctx.font = 'bold 15px system-ui';
+      const tw = ctx.measureText(S.banner.txt).width + 24;
+      ctx.fillStyle = 'rgba(10,20,14,0.8)'; ctx.fillRect(W / 2 - tw / 2, 48, tw, 26);
+      ctx.fillStyle = '#ffe08a'; ctx.fillText(S.banner.txt, W / 2, 66); ctx.globalAlpha = 1;
+    }
+    // arrow pointing to an off-screen merchant
+    if (S.merchant) {
+      const mx = S.merchant.x - p.x + W / 2, my = S.merchant.y - p.y + H / 2, pad = 30;
+      if (mx < 0 || mx > W || my < 0 || my > H) {
+        const ax = Math.max(pad, Math.min(W - pad, mx)), ay = Math.max(pad + 60, Math.min(H - pad, my)), ang = Math.atan2(my - H / 2, mx - W / 2);
+        ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang);
+        ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-4, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill();
+        ctx.restore(); ctx.font = '16px system-ui'; ctx.textAlign = 'center'; ctx.fillText('🐸', ax - Math.cos(ang) * 22, ay - Math.sin(ang) * 22 + 6);
+      }
+    }
     // HP bar under player
     const bx = W / 2 - 18, by = H / 2 + 22;
     ctx.fillStyle = '#400'; ctx.fillRect(bx, by, 36, 5);
@@ -902,7 +1103,7 @@
     if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, hy); hy += 18; }
     ctx.textAlign = 'left'; ctx.fillStyle = '#c9a8ff'; ctx.font = '12px system-ui';
     for (const k in p.mods) p.mods[k].forEach((id, t) => { ctx.fillText('✦ ' + MODIFIERS[k][t].find(m => m.id === id).name, 12, hy); hy += 16; });
-    if (S.paused && document.getElementById('levelup').classList.contains('hidden')) {
+    if (S.paused && !menuOpen()) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold 32px system-ui'; ctx.fillText('Paused (P)', W / 2, H / 2);
     }
@@ -927,7 +1128,7 @@
 
   function start() {
     newGame(); initUpgradeCounts();
-    ['menu', 'gameover', 'levelup'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    ['menu', 'gameover', 'levelup', 'shop'].forEach(id => document.getElementById(id).classList.add('hidden'));
     last = performance.now();
   }
   document.getElementById('startBtn').onclick = start;
