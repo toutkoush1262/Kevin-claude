@@ -213,7 +213,7 @@
        { id: 'armor', name: 'Thorn Armor', desc: 'Anything that bites you takes heavy thorn damage.' }],
     ],
   };
-  const SKILL_NAMES = { bolt: 'Spore Shot', orbit: 'Mushroom Buddies', aura: 'Puffball Cloud', tendril: 'Mycelium Tendrils', thorn: 'Thorn Nova' };
+  const SKILL_NAMES = { clone: 'Propagate', bolt: 'Spore Shot', orbit: 'Mushroom Buddies', aura: 'Puffball Cloud', tendril: 'Mycelium Tendrils', thorn: 'Thorn Nova' };
   // Branching modifier trees: a/b at level 5, then one letter per later pick, so the options at level 10 depend on the
   // level 5 pick (A -> C/D at 'aa'/'ab', B -> E/F at 'ba'/'bb') and the options at level 15 depend on the level 10 pick.
   // Branches default to the skill's MODIFIERS pairs; a skill overrides individual branches with its own options.
@@ -225,6 +225,22 @@
     bba: { id: 'vulnerable', name: 'Vulnerable Spores', desc: 'Enemies hit by Spore Shot take 10% increased damage for 3 seconds, stacking up to three times.' },
     bbb: { id: 'twinshot', name: 'Twin Shot', desc: 'Fires a secondary projectile immediately after the first that deals half damage.' },
   });
+  MOD_TREES.clone = {
+    a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 5 seconds, dealing damage equal to half your max HP in a large area. Respawns every 10 seconds.' },
+    aa: { id: 'extratrauma', name: 'Extra Traumatic', desc: 'Clones explode after 2 seconds and respawn twice as fast.' },
+    aaa: { id: 'stable', name: 'Emotionally Stable', desc: 'Clones explode every 2 seconds and no longer despawn after exploding.' },
+    aab: { id: 'lingering', name: 'Lingering Trauma', desc: 'The explosion area detonates two more times after the clone dies: first for 50% damage, then for 150%.' },
+    ab: { id: 'abandon', name: 'Abandonment Issues', desc: 'Your clone runs toward the strongest enemy when it spawns.' },
+    aba: { id: 'runaway', name: 'Runaway', desc: 'Your clone moves twice as fast.' },
+    abb: { id: 'walkaway', name: 'Walkaway', desc: 'Your clone moves at 50% speed but deals double damage.' },
+    b: { id: 'extraclone', name: 'Extra Propagation', desc: 'Spawn a second clone behind you.' },
+    ba: { id: 'nation', name: 'Propagation Nation', desc: 'Spawn a third clone behind you.' },
+    baa: { id: 'colony', name: 'Establish Colony', desc: 'All clones attack at full strength.' },
+    bab: { id: 'funguys', name: 'Fun Guys', desc: 'Clones attack twice as often, but use your skills with randomly picked modifiers.' },
+    bb: { id: 'shielding', name: 'Shielding Shrooms', desc: 'Each clone gives a 10% chance to block any instance of damage.' },
+    bba: { id: 'bulletproof', name: 'Bulletproof Shrooms', desc: 'Each clone gives a 20% chance to block damage, and you regenerate 5% max HP every 5 seconds.' },
+    bbb: { id: 'sacrifice', name: 'Sacrificial Shrooms', desc: 'If you would die, a clone sacrifices itself and you live at 50% health. It regrows after 60 seconds.' },
+  };
   // p.mods[skill] holds the codes picked so far, e.g. ['b', 'bb', 'bba']
   const hasMod = (p, k, id) => (p.mods[k] || []).some(c => MOD_TREES[k][c].id === id);
   const modOptions = (p, k) => { const last = (p.mods[k] || []).at(-1) || ''; return [last + 'a', last + 'b']; };
@@ -242,6 +258,9 @@
       type: 'active', apply: p => { p.w.tendril.level++; }, remove: p => { p.w.tendril.level--; } },
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
       type: 'active', apply: p => { p.w.thorn.level++; }, remove: p => { p.w.thorn.level--; } },
+    { id: 'clone', name: 'Propagate', desc: 'Grows a clone of you that follows you around and uses your skills at reduced strength.', max: SKILL_MAX,
+      info: p => `${Math.round(cloneEff((p.upgrades.clone || 0) + 1) * 100)}% strength`,
+      type: 'active', apply: p => { p.w.clone.level++; }, remove: p => { p.w.clone.level--; } },
     { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
       type: 'passive', apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); }, remove: p => { p.maxHp -= 20; p.hp = Math.min(p.hp, p.maxHp); } },
     { id: 'speed', name: 'Speedy Roots', desc: '+10% movement speed.', max: 5,
@@ -268,9 +287,10 @@
           aura: { level: 0, tick: 0 },
           thorn: { level: 0, cd: 0 },
           tendril: { level: 0, cd: 0 },
+          clone: { level: 0 },
         },
       },
-      enemies: [], bullets: [], tendrils: [], delayed: [], crystals: [], merchant: null, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
+      enemies: [], bullets: [], tendrils: [], delayed: [], clones: [], crystals: [], merchant: null, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
       shroomTimer: 10,
     };
   }
@@ -319,9 +339,9 @@
   }
 
   // ---------- Weapons ----------
-  function nearestEnemy(range) {
+  function nearestEnemy(range, from = S.player) {
     let best = null, bd = range * range;
-    for (const e of S.enemies) { const d = dist2(e, S.player); if (d < bd) { bd = d; best = e; } }
+    for (const e of S.enemies) { const d = dist2(e, from); if (d < bd) { bd = d; best = e; } }
     return best;
   }
 
@@ -352,17 +372,19 @@
     }
   }
 
-  function tendrilStrike(x1, y1, e, dmg, thick) {
-    const p = S.player;
+  function tendrilStrike(p, x1, y1, e, dmg, thick) {
     S.tendrils.push({ x1, y1, x2: e.x, y2: e.y, life: thick ? 0.55 : 0.4, seed: Math.random() * 99, thick });
     damageEnemy(e, dmg);
     if (hasMod(p, 'tendril', 'entangle')) e.rooted = 1;
-    if (hasMod(p, 'tendril', 'leech')) p.hp = Math.min(p.maxHp, p.hp + 1);
+    if (hasMod(p, 'tendril', 'leech')) heal(1);
     if (hasMod(p, 'tendril', 'echo')) later(0.5, () => { if (e.hp > 0) { S.tendrils.push({ x1, y1, x2: e.x, y2: e.y, life: 0.3, seed: Math.random() * 99, thick }); damageEnemy(e, dmg * 0.5); } });
   }
 
-  function updateWeapons(dt) {
-    const p = S.player, w = p.w;
+  const heal = n => { const p = S.player; p.hp = Math.min(p.maxHp, p.hp + n); };
+
+  // Runs every active skill for a caster: the player, or a clone (which has its own position, cooldowns and modifiers)
+  function updateWeapons(p, dt) {
+    const w = p.w;
 
     // Spore shot: aimed at nearest enemies
     if (w.bolt.level > 0) {
@@ -372,13 +394,13 @@
         let count = 1 + Math.floor(w.bolt.level / 3), spread = 0.18, dmg = (8 + w.bolt.level * 2) * p.might, pierce = 1 + Math.floor(w.bolt.level / 4), r = 5;
         if (hasMod(p, 'bolt', 'scatter')) { count += 2; spread = 0.3; dmg *= 0.7; }
         if (hasMod(p, 'bolt', 'heavy')) { count = 1; dmg *= 2.5; r = 9; }
-        const target = nearestEnemy(500);
+        const target = nearestEnemy(500, p);
         const base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
         const volleys = hasMod(p, 'bolt', 'twin') ? [base, base + Math.PI] : [base];
         const fire = mult => {
           for (const dirA of volleys) for (let i = 0; i < count; i++) {
             const a = dirA + (i - (count - 1) / 2) * spread;
-            S.bullets.push({ x: S.player.x, y: S.player.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r: r * (mult < 1 ? 0.7 : 1), dmg: dmg * mult, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
+            S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r: r * (mult < 1 ? 0.7 : 1), dmg: dmg * mult, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
               burst: hasMod(p, 'bolt', 'burst'), homing: hasMod(p, 'bolt', 'homing'), concussive: hasMod(p, 'bolt', 'concussive'), vulnerable: hasMod(p, 'bolt', 'vulnerable') });
           }
         };
@@ -393,7 +415,7 @@
       if (w.thorn.cd <= 0) {
         w.thorn.cd = Math.max(0.8, 3 - w.thorn.level * 0.15) * (hasMod(p, 'thorn', 'barrage') ? 0.5 : 1);
         fireThornRing(p, 0);
-        if (hasMod(p, 'thorn', 'double')) later(0.3, () => fireThornRing(S.player, 0.5));
+        if (hasMod(p, 'thorn', 'double')) later(0.3, () => fireThornRing(p, 0.5));
       }
     }
 
@@ -420,13 +442,13 @@
       w.tendril.cd -= dt;
       if (w.tendril.cd <= 0) {
         const cfg = tendrilCfg(p, w.tendril.level), thick = hasMod(p, 'tendril', 'taproot');
-        const first = nearestEnemy(280);
+        const first = nearestEnemy(280, p);
         if (!first) w.tendril.cd = 0.3;
         else {
           w.tendril.cd = tendrilCooldown(w.tendril.level) * (hasMod(p, 'tendril', 'quick') ? 0.5 : 1);
           const dmg = tendrilDamage(w.tendril.level) * p.might * cfg.dmgMult;
           const hit = new Set([first]);
-          tendrilStrike(p.x, p.y, first, dmg, thick);
+          tendrilStrike(p, p.x, p.y, first, dmg, thick);
           let frontier = [first];
           for (let gen = 1; gen <= cfg.depth && hit.size < cfg.maxHits; gen++) {
             const next = [];
@@ -438,7 +460,7 @@
               for (const e of targets) {
                 if (hit.size >= cfg.maxHits) break;
                 hit.add(e); next.push(e);
-                tendrilStrike(src.x, src.y, e, dmg * Math.pow(0.85, gen), thick);
+                tendrilStrike(p, src.x, src.y, e, dmg * Math.pow(0.85, gen), thick);
               }
             }
             frontier = next;
@@ -466,8 +488,86 @@
             damageEnemy(e, (3 + w.aura.level * 2) * p.might * (hasMod(p, 'aura', 'fog') ? 0.7 : 1) * (pulse ? 6 : 1));
           }
         }
-        if (hasMod(p, 'aura', 'feast')) p.hp = Math.min(p.maxHp, p.hp + Math.min(3, inside * 0.5));
+        if (hasMod(p, 'aura', 'feast')) heal(Math.min(3, inside * 0.5));
       }
+    }
+  }
+
+  // ---------- Propagate: clones ----------
+  const ACTIVE = ['bolt', 'orbit', 'aura', 'thorn', 'tendril'];
+  const cloneEff = lvl => 0.5 + 0.02 * Math.max(0, lvl - 1); // 50% at level 1, +2% per level
+  // A random modifier path for each skill, as deep as the player's own path (Fun Guys)
+  function randomMods(p) {
+    const mods = {};
+    for (const k of ACTIVE) { let path = ''; mods[k] = (p.mods[k] || []).map(() => (path += Math.random() < 0.5 ? 'a' : 'b')); }
+    return mods;
+  }
+  function newClone(i) {
+    const p = S.player;
+    return { i, x: p.x - p.face * 30 * (i + 1), y: p.y + 10, face: p.face, dead: false, respawn: 0, fuse: 0, target: null, funSig: '',
+      w: { bolt: { level: 0, cd: Math.random() }, orbit: { level: 0, angle: i * 1.3, hitCd: new Map() }, aura: { level: 0, tick: 0.25 }, thorn: { level: 0, cd: 1 + i * 0.4 }, tendril: { level: 0, cd: 0.5 + i * 0.3 } },
+      mods: p.mods, might: p.might };
+  }
+  function spawnClone(c) {
+    const p = S.player;
+    c.dead = false; c.x = p.x - p.face * 30; c.y = p.y + 10;
+    c.fuse = hasMod(p, 'clone', 'extratrauma') ? 2 : 5;
+    c.target = null;
+    if (hasMod(p, 'clone', 'abandon')) c.target = S.enemies.reduce((best, e) => (!best || e.hp > best.hp ? e : best), null);
+    S.shockwaves.push({ x: c.x, y: c.y, r: 0, max: 40, life: 0.4, color: '#f3c1e8' });
+  }
+  function cloneExplode(x, y, mult) {
+    const p = S.player, rad = 150;
+    const dmg = p.maxHp * 0.5 * p.might * (1 + 0.02 * (p.w.clone.level - 1)) * (hasMod(p, 'clone', 'walkaway') ? 2 : 1) * mult;
+    for (const e of S.enemies) if (dist2(e, { x, y }) < (rad + e.r) ** 2) damageEnemy(e, dmg, (e.x - x) * 2, (e.y - y) * 2);
+    S.shockwaves.push({ x, y, r: 0, max: rad, life: 0.6, color: '#ff8a5c' }, { x, y, r: -30, max: rad, life: 0.7, color: '#ffd84a' });
+    for (let i = 0; i < 30; i++) { const a = Math.random() * 6.28, sp = rand(100, 320); S.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), color: i % 2 ? '#ff8a5c' : '#f3e6c8' }); }
+  }
+  const aliveClones = () => S.clones.filter(c => !c.dead).length;
+
+  function updateClones(dt) {
+    const p = S.player, lvl = p.w.clone.level;
+    if (lvl <= 0) { S.clones = []; return; }
+    const bomber = hasMod(p, 'clone', 'trauma');
+    const want = bomber ? 1 : 1 + (hasMod(p, 'clone', 'extraclone') ? 1 : 0) + (hasMod(p, 'clone', 'nation') ? 1 : 0);
+    while (S.clones.length < want) { const c = newClone(S.clones.length); S.clones.push(c); spawnClone(c); }
+    S.clones.length = want;
+    const fun = hasMod(p, 'clone', 'funguys');
+    if (hasMod(p, 'clone', 'bulletproof')) heal(p.maxHp * 0.01 * dt); // 5% max HP every 5 seconds
+    for (const c of S.clones) {
+      if (c.dead) { if ((c.respawn -= dt) <= 0) spawnClone(c); continue; }
+      // Movement: chase the strongest enemy (Abandonment Issues), otherwise trail behind you in a fan
+      if (c.target && c.target.hp <= 0) c.target = S.enemies.reduce((best, e) => (!best || e.hp > best.hp ? e : best), null);
+      let tx, ty;
+      if (c.target) { tx = c.target.x; ty = c.target.y; }
+      else { const side = (c.i - (S.clones.length - 1) / 2) * 34; tx = p.x - p.face * 38 - Math.abs(side) * 0.3 * p.face; ty = p.y + side; }
+      const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy) || 1;
+      const speed = c.target ? 170 * (hasMod(p, 'clone', 'runaway') ? 2 : 1) * (hasMod(p, 'clone', 'walkaway') ? 0.5 : 1) : Math.max(p.speed * 1.2, d * 4);
+      const step = Math.min(d, speed * dt);
+      c.x += dx / d * step; c.y += dy / d * step;
+      if (Math.abs(dx) > 2) c.face = Math.sign(dx);
+      c.moving = d > 4;
+      if (bomber) {
+        if ((c.fuse -= dt) <= 0) {
+          const x = c.x, y = c.y;
+          cloneExplode(x, y, 1);
+          if (hasMod(p, 'clone', 'stable')) c.fuse = 2;
+          else {
+            c.dead = true; c.respawn = hasMod(p, 'clone', 'extratrauma') ? 5 : 10;
+            if (hasMod(p, 'clone', 'lingering')) { later(0.6, () => cloneExplode(x, y, 0.5)); later(1.2, () => cloneExplode(x, y, 1.5)); }
+          }
+        }
+        continue;
+      }
+      // Attacking clone: mirror your skill levels; use your modifiers, or random ones with Fun Guys
+      for (const k of ACTIVE) c.w[k].level = p.w[k].level;
+      if (fun) {
+        const sig = ACTIVE.map(k => (p.mods[k] || []).length).join();
+        if (c.funSig !== sig) { c.funSig = sig; c.funMods = randomMods(p); }
+        c.mods = c.funMods;
+      } else c.mods = p.mods;
+      c.might = p.might * (hasMod(p, 'clone', 'colony') ? 1 : cloneEff(lvl));
+      updateWeapons(c, fun ? dt * 2 : dt);
     }
   }
 
@@ -478,7 +578,7 @@
   function gainLevel(u) {
     const p = S.player;
     u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
-    const tier = MODIFIERS[u.id] ? modTierFor(p.upgrades[u.id]) : -1;
+    const tier = MOD_TREES[u.id] ? modTierFor(p.upgrades[u.id]) : -1;
     return tier >= 0 && (p.mods[u.id] || []).length === tier ? tier : -1;
   }
   // Removes one level from a skill, dropping any modifier whose level is no longer reached; returns lost modifier names
@@ -514,7 +614,7 @@
       const lvl = p.upgrades[u.id] || 0;
       const div = document.createElement('div');
       div.className = 'card';
-      const tier = MODIFIERS[u.id] ? modTierFor(lvl + 1) : -1, modNext = tier >= 0;
+      const tier = MOD_TREES[u.id] ? modTierFor(lvl + 1) : -1, modNext = tier >= 0;
       div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>${modNext ? '<small style="color:#c9a8ff">✦ Unlocks a skill modifier choice</small>' : ''}`;
       div.onclick = () => {
         const t = gainLevel(u);
@@ -691,7 +791,8 @@
     S.shroomTimer -= dt;
     if (S.shroomTimer <= 0) { S.shroomTimer = rand(12, 20); spawnShroom(); }
 
-    updateWeapons(dt);
+    updateWeapons(p, dt);
+    updateClones(dt);
 
     // Enemies
     for (const e of S.enemies) {
@@ -707,10 +808,23 @@
       e.kx *= 0.85; e.ky *= 0.85;
       e.flash = Math.max(0, e.flash - dt);
       if (d < e.r + p.r && p.hurt <= 0) {
+        const block = aliveClones() * (hasMod(p, 'clone', 'bulletproof') ? 0.2 : hasMod(p, 'clone', 'shielding') ? 0.1 : 0);
+        if (Math.random() < block) { // Shielding Shrooms
+          p.hurt = 0.5; S.texts.push({ x: p.x, y: p.y - 24, txt: 'Blocked!', life: 0.8, color: '#f3c1e8' });
+          S.shockwaves.push({ x: p.x, y: p.y, r: 0, max: 40, life: 0.3, color: '#f3c1e8' });
+          continue;
+        }
         p.hp -= e.dmg; p.hurt = 0.5;
         if (hasMod(p, 'thorn', 'armor')) damageEnemy(e, (6 + p.w.thorn.level * 3) * p.might * 4, -dx / d * 300, -dy / d * 300);
         S.texts.push({ x: p.x + rand(-12, 12), y: p.y - 24, txt: ['CHOMP!', 'NOM!', 'MUNCH!', 'Yum!'][Math.floor(Math.random() * 4)], life: 0.8, color: '#ffcf6b' });
         for (let i = 0; i < 5; i++) S.particles.push({ x: p.x, y: p.y - 8, vx: rand(-90, 90), vy: rand(-140, -20), life: 0.4, color: '#efe3c8' });
+        if (p.hp <= 0 && hasMod(p, 'clone', 'sacrifice') && aliveClones()) { // Sacrificial Shrooms
+          const c = S.clones.find(c => !c.dead);
+          c.dead = true; c.respawn = 60;
+          p.hp = p.maxHp * 0.5;
+          cloneExplode(c.x, c.y, 0);
+          S.banner = { txt: 'A clone sacrificed itself to save you!', life: 3, color: '#f3c1e8' };
+        }
         if (p.hp <= 0) return gameOver();
       }
       // Despawn far-away enemies and respawn near
@@ -984,9 +1098,34 @@
     }
   }
 
+  function drawAura(p) {
+    if (p.w.aura.level > 0) {
+      const rad = auraRadius(p);
+      if (p.w.aura.flash > 0) { p.w.aura.flash -= 1 / 60; ctx.fillStyle = `rgba(220, 255, 140, ${p.w.aura.flash})`; ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill(); }
+      ctx.fillStyle = `rgba(${hasMod(p, 'aura', 'choke') ? '150, 120, 200' : '170, 220, 90'}, ${0.12 + Math.sin(S.t * 4) * 0.03})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(200,240,120,0.35)';
+      for (let i = 0; i < 10; i++) { const a = S.t * 0.7 + i * 0.63, rr = rad * (0.4 + 0.5 * ((i * 0.37 + S.t * 0.2) % 1)); ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * rr, p.y + Math.sin(a) * rr, 3, 0, 7); ctx.fill(); }
+    }
+  }
+
+  // A clone is drawn as a slightly smaller, see-through pink-capped you; a bomb clone glows faster as its fuse runs down
+  function drawClone(c) {
+    const bomber = hasMod(S.player, 'clone', 'trauma');
+    if (bomber) {
+      const pulse = 0.5 + 0.5 * Math.sin(S.t * (c.fuse < 1.5 ? 30 : 10));
+      ctx.fillStyle = `rgba(255, 110, 70, ${0.15 + pulse * 0.25})`; ctx.beginPath(); ctx.arc(c.x, c.y, 22 + pulse * 4, 0, 7); ctx.fill();
+    }
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(0.85, 0.85); ctx.translate(-c.x, -c.y);
+    drawPlayer({ x: c.x, y: c.y, face: c.face, moving: c.moving, hurt: 0, speedBoost: 0, alpha: 0.78, cap: bomber ? '#ff6b3d' : '#d968c4' });
+    ctx.restore();
+    if (bomber) { ctx.fillStyle = '#ffe08a'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText(Math.ceil(c.fuse), c.x, c.y - 30); }
+  }
+
   function drawPlayer(p) {
     ctx.save(); ctx.translate(p.x, p.y);
     const step = p.moving ? Math.sin(S.t * 14) : 0;
+    if (p.alpha) ctx.globalAlpha = p.alpha;
     if (p.hurt > 0 && Math.floor(p.hurt * 20) % 2) ctx.globalAlpha = 0.4;
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 16, 13, 4, 0, 0, 7); ctx.fill();
     // little feet
@@ -1011,7 +1150,7 @@
     }
     ctx.fillStyle = 'rgba(255,130,130,0.5)'; ctx.beginPath(); ctx.arc(fx - 6, 4.5, 1.8, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(fx + 6, 4.5, 1.8, 0, 7); ctx.fill();
     // cap
-    ctx.fillStyle = p.speedBoost > 0 ? '#3d8fd6' : '#e8423b';
+    ctx.fillStyle = p.cap || (p.speedBoost > 0 ? '#3d8fd6' : '#e8423b');
     ctx.beginPath(); ctx.moveTo(-17, -5); ctx.quadraticCurveTo(-16, -24, 0, -25); ctx.quadraticCurveTo(16, -24, 17, -5); ctx.quadraticCurveTo(0, -1, -17, -5); ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(-8, -14, 3, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(3, -19, 3.4, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(10, -10, 2.2, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(-1, -9, 1.8, 0, 7); ctx.fill();
@@ -1024,15 +1163,7 @@
     ctx.save();
     ctx.translate(W / 2 - p.x, H / 2 - p.y);
 
-    // Aura
-    if (p.w.aura.level > 0) {
-      const rad = auraRadius(p);
-      if (p.w.aura.flash > 0) { p.w.aura.flash -= 1 / 60; ctx.fillStyle = `rgba(220, 255, 140, ${p.w.aura.flash})`; ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill(); }
-      ctx.fillStyle = `rgba(${hasMod(p, 'aura', 'choke') ? '150, 120, 200' : '170, 220, 90'}, ${0.12 + Math.sin(S.t * 4) * 0.03})`;
-      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
-      ctx.fillStyle = 'rgba(200,240,120,0.35)';
-      for (let i = 0; i < 10; i++) { const a = S.t * 0.7 + i * 0.63, rr = rad * (0.4 + 0.5 * ((i * 0.37 + S.t * 0.2) % 1)); ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * rr, p.y + Math.sin(a) * rr, 3, 0, 7); ctx.fill(); }
-    }
+    for (const c of [p, ...S.clones.filter(c => !c.dead && !hasMod(p, 'clone', 'trauma'))]) drawAura(c);
 
     // Spores (xp gems)
     for (const g of S.gems) {
@@ -1094,10 +1225,12 @@
     if (S.merchant) drawMerchant(S.merchant);
     drawPlayer(p);
 
+    for (const c of S.clones) if (!c.dead) drawClone(c);
     // Orbiting mushrooms
-    if (p.w.orbit.level > 0) {
-      const size = 18 * orbitSize(p);
-      for (const b of orbitPositions(p)) drawMushroom(b.x, b.y + size * 0.45, size, '#c25bff', '#f3d4ff');
+    for (const c of [p, ...S.clones.filter(c => !c.dead && !hasMod(p, 'clone', 'trauma'))]) {
+      if (c.w.orbit.level <= 0) continue;
+      const size = 18 * orbitSize(c);
+      for (const b of orbitPositions(c)) drawMushroom(b.x, b.y + size * 0.45, size, '#c25bff', '#f3d4ff');
     }
 
     // Bullets
