@@ -170,11 +170,11 @@
   }
 
   // Skill modifiers: at skill levels 5, 10 and 15, pick one of two that change how the skill behaves (permanent).
-  // MODIFIERS[skill][tier] is the pair offered at level (tier + 1) * 5.
+  // MODIFIERS[skill][tier] lists default pairs per level; MOD_TREES below turns them into branching paths.
   const MODIFIERS = {
     bolt: [
       [{ id: 'scatter', name: 'Scattershot', desc: '+2 spore shots in a wide fan, but each deals 30% less damage.' },
-       { id: 'heavy', name: 'Heavy Spore', desc: 'Fires one big spore shot that deals 2.5× damage and pierces 3 more enemies.' }],
+       { id: 'heavy', name: 'Heavy Spore', desc: 'Fires one big spore shot that deals 2.5× damage.' }],
       [{ id: 'burst', name: 'Spore Burst', desc: 'Shots explode on hit, dealing 50% damage to nearby enemies.' },
        { id: 'rapid', name: 'Rapid Spores', desc: 'Fires 40% faster.' }],
       [{ id: 'homing', name: 'Seeking Spores', desc: 'Shots curve toward the nearest enemy.' },
@@ -214,7 +214,20 @@
     ],
   };
   const SKILL_NAMES = { bolt: 'Spore Shot', orbit: 'Mushroom Buddies', aura: 'Puffball Cloud', tendril: 'Mycelium Tendrils', thorn: 'Thorn Nova' };
-  const hasMod = (p, k, id) => (p.mods[k] || []).includes(id);
+  // Branching modifier trees: a/b at level 5, then one letter per later pick, so the options at level 10 depend on the
+  // level 5 pick (A -> C/D at 'aa'/'ab', B -> E/F at 'ba'/'bb') and the options at level 15 depend on the level 10 pick.
+  // Branches default to the skill's MODIFIERS pairs; a skill overrides individual branches with its own options.
+  const MOD_CODES = ['a', 'b', 'aa', 'ab', 'ba', 'bb', 'aaa', 'aab', 'aba', 'abb', 'baa', 'bab', 'bba', 'bbb'];
+  const MOD_TREES = Object.fromEntries(Object.entries(MODIFIERS).map(([k, tiers]) =>
+    [k, Object.fromEntries(MOD_CODES.map(c => [c, tiers[c.length - 1][c.endsWith('a') ? 0 : 1]]))]));
+  Object.assign(MOD_TREES.bolt, {
+    bb: { id: 'concussive', name: 'Concussive Spores', desc: 'Deals 5% increased damage for each consecutive hit against the same target, up to a maximum of 60%.' },
+    bba: { id: 'vulnerable', name: 'Vulnerable Spores', desc: 'Enemies hit by Spore Shot take 10% increased damage for 3 seconds, stacking up to three times.' },
+    bbb: { id: 'twinshot', name: 'Twin Shot', desc: 'Fires a secondary projectile immediately after the first that deals half damage.' },
+  });
+  // p.mods[skill] holds the codes picked so far, e.g. ['b', 'bb', 'bba']
+  const hasMod = (p, k, id) => (p.mods[k] || []).some(c => MOD_TREES[k][c].id === id);
+  const modOptions = (p, k) => { const last = (p.mods[k] || []).at(-1) || ''; return [last + 'a', last + 'b']; };
   const modTierFor = lvl => (lvl % 5 === 0 ? lvl / 5 - 1 : -1);
 
   const UPGRADES = [
@@ -286,6 +299,7 @@
 
   function damageEnemy(e, dmg, kx = 0, ky = 0) {
     if (e.vuln > 0) dmg *= 1.25;
+    if (e.vulnT > 0) dmg *= 1 + 0.1 * e.vulnStacks;
     e.hp -= dmg; e.flash = 0.1; e.kx += kx; e.ky += ky;
     S.texts.push({ x: e.x, y: e.y - e.r, txt: Math.round(dmg), life: 0.6 });
   }
@@ -357,15 +371,19 @@
         w.bolt.cd = Math.max(0.2, 0.9 - w.bolt.level * 0.05) * (hasMod(p, 'bolt', 'rapid') ? 0.6 : 1);
         let count = 1 + Math.floor(w.bolt.level / 3), spread = 0.18, dmg = (8 + w.bolt.level * 2) * p.might, pierce = 1 + Math.floor(w.bolt.level / 4), r = 5;
         if (hasMod(p, 'bolt', 'scatter')) { count += 2; spread = 0.3; dmg *= 0.7; }
-        if (hasMod(p, 'bolt', 'heavy')) { count = 1; dmg *= 2.5; pierce += 3; r = 9; }
+        if (hasMod(p, 'bolt', 'heavy')) { count = 1; dmg *= 2.5; r = 9; }
         const target = nearestEnemy(500);
         const base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
         const volleys = hasMod(p, 'bolt', 'twin') ? [base, base + Math.PI] : [base];
-        for (const dirA of volleys) for (let i = 0; i < count; i++) {
-          const a = dirA + (i - (count - 1) / 2) * spread;
-          S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r, dmg, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
-            burst: hasMod(p, 'bolt', 'burst'), homing: hasMod(p, 'bolt', 'homing') });
-        }
+        const fire = mult => {
+          for (const dirA of volleys) for (let i = 0; i < count; i++) {
+            const a = dirA + (i - (count - 1) / 2) * spread;
+            S.bullets.push({ x: S.player.x, y: S.player.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r: r * (mult < 1 ? 0.7 : 1), dmg: dmg * mult, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
+              burst: hasMod(p, 'bolt', 'burst'), homing: hasMod(p, 'bolt', 'homing'), concussive: hasMod(p, 'bolt', 'concussive'), vulnerable: hasMod(p, 'bolt', 'vulnerable') });
+          }
+        };
+        fire(1);
+        if (hasMod(p, 'bolt', 'twinshot')) later(0.08, () => fire(0.5));
       }
     }
 
@@ -461,14 +479,14 @@
     const p = S.player;
     u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
     const tier = MODIFIERS[u.id] ? modTierFor(p.upgrades[u.id]) : -1;
-    return tier >= 0 && MODIFIERS[u.id][tier] && (p.mods[u.id] || []).length === tier ? tier : -1;
+    return tier >= 0 && (p.mods[u.id] || []).length === tier ? tier : -1;
   }
   // Removes one level from a skill, dropping any modifier whose level is no longer reached; returns lost modifier names
   function loseLevel(u) {
     const p = S.player;
     u.remove(p); p.upgrades[u.id]--;
     const mods = p.mods[u.id] || [], keep = Math.floor(p.upgrades[u.id] / 5);
-    const lost = mods.slice(keep).map((id, i) => MODIFIERS[u.id][keep + i].find(m => m.id === id).name);
+    const lost = mods.slice(keep).map(c => MOD_TREES[u.id][c].name);
     if (mods.length) p.mods[u.id] = mods.slice(0, keep);
     return lost;
   }
@@ -496,7 +514,7 @@
       const lvl = p.upgrades[u.id] || 0;
       const div = document.createElement('div');
       div.className = 'card';
-      const tier = MODIFIERS[u.id] ? modTierFor(lvl + 1) : -1, modNext = tier >= 0 && MODIFIERS[u.id][tier];
+      const tier = MODIFIERS[u.id] ? modTierFor(lvl + 1) : -1, modNext = tier >= 0;
       div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>${modNext ? '<small style="color:#c9a8ff">✦ Unlocks a skill modifier choice</small>' : ''}`;
       div.onclick = () => {
         const t = gainLevel(u);
@@ -512,12 +530,13 @@
     document.getElementById('levelTitle').textContent = `${SKILL_NAMES[k]} reached level ${p.w[k].level}! Choose a modifier`;
     const cards = document.getElementById('cards');
     cards.innerHTML = '';
-    for (const m of MODIFIERS[k][tier]) {
+    for (const code of modOptions(p, k)) {
+      const m = MOD_TREES[k][code];
       const div = document.createElement('div');
       div.className = 'card mod';
       div.innerHTML = `<b>${m.name}</b><span>${m.desc}</span><small>Permanent modifier for ${SKILL_NAMES[k]}</small>`;
       div.onclick = () => {
-        (p.mods[k] = p.mods[k] || []).push(m.id);
+        (p.mods[k] = p.mods[k] || []).push(code);
         document.getElementById('levelup').classList.add('hidden');
         onDone();
       };
@@ -681,6 +700,7 @@
       if (e.type === 'bat' || e.type === 'pixie') { e.phase += dt * 6; sx += Math.cos(e.phase) * 0.5; sy += Math.sin(e.phase) * 0.5; }
       const spd = e.rooted > 0 ? 0 : e.speed * (e.slow > 0 ? 0.5 : 1);
       for (const k of ['slow', 'rooted', 'vuln', 'rot']) if (e[k] > 0) e[k] -= dt;
+      if (e.vulnT > 0 && (e.vulnT -= dt) <= 0) e.vulnStacks = 0;
       if (e.poison > 0) { e.poison -= dt; e.hp -= e.poisonDps * dt; }
       e.x += sx * spd * dt + e.kx * dt; e.y += sy * spd * dt + e.ky * dt;
       e.kx *= 0.85; e.ky *= 0.85;
@@ -720,7 +740,10 @@
       for (const e of S.enemies) {
         if (b.pierce <= 0 || b.hit.has(e)) continue;
         if (dist2(b, e) < (b.r + e.r) ** 2) {
-          damageEnemy(e, b.dmg, b.vx * 0.3, b.vy * 0.3); b.hit.add(e); b.pierce--;
+          let dmg = b.dmg;
+          if (b.concussive) { dmg *= 1 + Math.min(0.6, 0.05 * (e.sporeHits || 0)); e.sporeHits = (e.sporeHits || 0) + 1; } // Concussive Spores
+          damageEnemy(e, dmg, b.vx * 0.3, b.vy * 0.3); b.hit.add(e); b.pierce--;
+          if (b.vulnerable) { e.vulnStacks = Math.min(3, (e.vulnStacks || 0) + 1); e.vulnT = 3; } // Vulnerable Spores
           if (b.poison) { e.poison = 2; e.poisonDps = b.dmg * 0.4; }
           if (b.burst) {
             for (const o of S.enemies) if (o !== e && dist2(o, e) < 60 * 60) damageEnemy(o, b.dmg * 0.5);
@@ -1179,7 +1202,7 @@
     let hy = 52;
     if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, hy); hy += 18; }
     ctx.textAlign = 'left'; ctx.fillStyle = '#c9a8ff'; ctx.font = '12px system-ui';
-    for (const k in p.mods) p.mods[k].forEach((id, t) => { ctx.fillText('✦ ' + MODIFIERS[k][t].find(m => m.id === id).name, 12, hy); hy += 16; });
+    for (const k in p.mods) p.mods[k].forEach(c => { ctx.fillText('✦ ' + MOD_TREES[k][c].name, 12, hy); hy += 16; });
     if (S.paused && !menuOpen()) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold 32px system-ui'; ctx.fillText('Paused (P)', W / 2, H / 2);
