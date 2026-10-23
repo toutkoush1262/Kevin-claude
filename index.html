@@ -221,7 +221,7 @@
   const MOD_TREES = Object.fromEntries(Object.entries(MODIFIERS).map(([k, tiers]) =>
     [k, Object.fromEntries(MOD_CODES.map(c => [c, tiers[c.length - 1][c.endsWith('a') ? 0 : 1]]))]));
   Object.assign(MOD_TREES.bolt, {
-    bb: { id: 'concussive', name: 'Concussive Spores', desc: 'Deals 5% increased damage for each consecutive hit against the same target, up to a maximum of 60%.' },
+    bb: { id: 'concussive', name: 'Concussive Spores', desc: 'Each hit gives the enemy a Concussive stack (max 12): +5% Spore Shot damage to it per stack. Stacks fall off after 5 seconds without a new one.' },
     bba: { id: 'vulnerable', name: 'Vulnerable Spores', desc: 'Enemies hit by Spore Shot take 10% increased damage for 3 seconds, stacking up to three times.' },
     bbb: { id: 'twinshot', name: 'Twin Shot', desc: 'Fires a secondary projectile immediately after the first that deals half damage.' },
   });
@@ -701,6 +701,7 @@
       const spd = e.rooted > 0 ? 0 : e.speed * (e.slow > 0 ? 0.5 : 1);
       for (const k of ['slow', 'rooted', 'vuln', 'rot']) if (e[k] > 0) e[k] -= dt;
       if (e.vulnT > 0 && (e.vulnT -= dt) <= 0) e.vulnStacks = 0;
+      if (e.concussT > 0 && (e.concussT -= dt) <= 0) e.concussStacks = 0;
       if (e.poison > 0) { e.poison -= dt; e.hp -= e.poisonDps * dt; }
       e.x += sx * spd * dt + e.kx * dt; e.y += sy * spd * dt + e.ky * dt;
       e.kx *= 0.85; e.ky *= 0.85;
@@ -741,7 +742,10 @@
         if (b.pierce <= 0 || b.hit.has(e)) continue;
         if (dist2(b, e) < (b.r + e.r) ** 2) {
           let dmg = b.dmg;
-          if (b.concussive) { dmg *= 1 + Math.min(0.6, 0.05 * (e.sporeHits || 0)); e.sporeHits = (e.sporeHits || 0) + 1; } // Concussive Spores
+          if (b.concussive) { // Concussive Spores: per-enemy stacks, refreshed by every hit (even at the 12-stack cap)
+            dmg *= 1 + 0.05 * (e.concussStacks || 0);
+            e.concussStacks = Math.min(12, (e.concussStacks || 0) + 1); e.concussT = 5;
+          }
           damageEnemy(e, dmg, b.vx * 0.3, b.vy * 0.3); b.hit.add(e); b.pierce--;
           if (b.vulnerable) { e.vulnStacks = Math.min(3, (e.vulnStacks || 0) + 1); e.vulnT = 3; } // Vulnerable Spores
           if (b.poison) { e.poison = 2; e.poisonDps = b.dmg * 0.4; }
@@ -971,6 +975,13 @@
       }
     }
     ctx.restore();
+    if (e.concussStacks > 0) { // Concussive stack counter, fading as the 5-second window runs out
+      ctx.globalAlpha = Math.min(1, 0.35 + e.concussT / 5);
+      ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#111';
+      const txt = `✷${e.concussStacks}`, y = e.y - e.r * (e.type === 'troll' ? 1.9 : 1.4) - 4;
+      ctx.strokeText(txt, e.x, y); ctx.fillStyle = e.concussStacks >= 12 ? '#ffcf4a' : '#d9a6ff'; ctx.fillText(txt, e.x, y);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawPlayer(p) {
