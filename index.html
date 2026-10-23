@@ -31,9 +31,6 @@
   .card small { display: block; margin-top: 8px; color: #8fb39a; }
   .card.mod { border-color: #8a5cc2; background: #241d33; }
   .card.mod:hover { border-color: #ffe08a; background: #2e2542; }
-  .mod-group { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .mod-group > div:first-child { color: #c9a8ff; font-weight: 700; }
-  .mod-group .pair { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 </style>
 </head>
 <body>
@@ -152,7 +149,7 @@
     return c;
   }
 
-  // Skill modifiers: every 5 levels, pick one of two for a skill you own. Each skill gets one, permanently.
+  // Skill modifiers: when a skill reaches level 5, pick one of two that change how it behaves (permanent).
   const MODIFIERS = {
     bolt: [
       { id: 'scatter', name: 'Scattershot', desc: '+2 spore shots in a wide fan, but each deals 30% less damage.' },
@@ -377,7 +374,6 @@
     const p = S.player;
     p.level++; p.xp -= p.xpNext; p.xpNext = Math.floor(p.xpNext * 1.3 + 4);
     S.paused = true;
-    if (p.level % 5 === 0 && showModifierChoice()) return;
     document.getElementById('levelTitle').textContent = 'Level up! Choose a blessing';
     const pool = UPGRADES.filter(u => (p.upgrades[u.id] || 0) < u.max);
     const picks = [];
@@ -389,9 +385,11 @@
       const lvl = p.upgrades[u.id] || 0;
       const div = document.createElement('div');
       div.className = 'card';
-      div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>`;
+      const modNext = MODIFIERS[u.id] && (lvl + 1) % 5 === 0 && !p.mods[u.id];
+      div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>${modNext ? '<small style="color:#c9a8ff">✦ Unlocks a skill modifier choice</small>' : ''}`;
       div.onclick = () => {
         u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
+        if (modNext) return showModifierChoice(u.id);
         document.getElementById('levelup').classList.add('hidden');
         S.paused = false;
         if (p.xp >= p.xpNext) levelUp();
@@ -400,36 +398,25 @@
     }
     document.getElementById('levelup').classList.remove('hidden');
   }
-  // Every 5 levels: offer modifiers for up to two owned skills that don't have one yet
-  function showModifierChoice() {
+  // Shown right after a skill reaches level 5: pick one of its two modifiers
+  function showModifierChoice(k) {
     const p = S.player;
-    const owned = Object.keys(MODIFIERS).filter(k => p.w[k].level > 0 && !p.mods[k]);
-    if (!owned.length) return false;
-    const skills = [];
-    while (skills.length < 2 && owned.length) skills.push(owned.splice(Math.floor(Math.random() * owned.length), 1)[0]);
-    document.getElementById('levelTitle').textContent = `Level ${p.level}! Choose a skill modifier`;
+    document.getElementById('levelTitle').textContent = `${SKILL_NAMES[k]} reached level ${p.w[k].level}! Choose a modifier`;
     const cards = document.getElementById('cards');
     cards.innerHTML = '';
-    for (const k of skills) {
-      const group = document.createElement('div');
-      group.className = 'mod-group';
-      group.innerHTML = `<div>${SKILL_NAMES[k]}</div><div class="pair"></div>`;
-      for (const m of MODIFIERS[k]) {
-        const div = document.createElement('div');
-        div.className = 'card mod';
-        div.innerHTML = `<b>${m.name}</b><span>${m.desc}</span><small>Permanent modifier for ${SKILL_NAMES[k]}</small>`;
-        div.onclick = () => {
-          p.mods[k] = m.id;
-          document.getElementById('levelup').classList.add('hidden');
-          S.paused = false;
-          if (p.xp >= p.xpNext) levelUp();
-        };
-        group.lastChild.appendChild(div);
-      }
-      cards.appendChild(group);
+    for (const m of MODIFIERS[k]) {
+      const div = document.createElement('div');
+      div.className = 'card mod';
+      div.innerHTML = `<b>${m.name}</b><span>${m.desc}</span><small>Permanent modifier for ${SKILL_NAMES[k]}</small>`;
+      div.onclick = () => {
+        p.mods[k] = m.id;
+        document.getElementById('levelup').classList.add('hidden');
+        S.paused = false;
+        if (p.xp >= p.xpNext) levelUp();
+      };
+      cards.appendChild(div);
     }
     document.getElementById('levelup').classList.remove('hidden');
-    return true;
   }
 
   // Bolt starts at level 1 already
