@@ -55,7 +55,9 @@
     Hungry slugs, bats, goblins, truffle boars, pixies and trolls are coming to eat you.
     Don't get eaten! Your spore attacks fire automatically.</p>
   <p><b>Move:</b> WASD / arrow keys, or drag on touch screens.<br>
-    Collect glowing spores to level up. Grab magic mushroom kin for boosts:<br>
+    Collect glowing spores to level up: <span style="color:#9dff8a">green</span> ×1,
+    <span style="color:#ff8ad8">pink</span> ×2, <span style="color:#ffd84a">golden</span> ×5 (rarer ones show up more as the night goes on).<br>
+    Grab magic mushroom kin for boosts:<br>
     <span style="color:#ff6b6b">Red</span> heals · <span style="color:#6bc7ff">Blue</span> speed ·
     <span style="color:#ffd84a">Gold</span> pulls in all spores</p>
   <button id="startBtn">Start</button>
@@ -324,6 +326,19 @@
     S.texts.push({ x: e.x, y: e.y - e.r, txt: Math.round(dmg), life: 0.6 });
   }
 
+  // Spore tiers: green is the base value; pink (2x) and golden (5x) get more common as the run goes on,
+  // to offset the XP needed per level growing faster than enemy count
+  const SPORES = {
+    green: { mult: 1, color: '#9dff8a', r: 3.2 },
+    pink: { mult: 2, color: '#ff8ad8', r: 4 },
+    gold: { mult: 5, color: '#ffd84a', r: 4.8 },
+  };
+  function sporeTier() {
+    const min = S.t / 60, r = Math.random();
+    const gold = Math.min(0.08, 0.006 * min), pink = Math.min(0.25, 0.02 + 0.02 * min);
+    return r < gold ? 'gold' : r < gold + pink ? 'pink' : 'green';
+  }
+
   function killEnemy(e) {
     S.kills++;
     if (e.rot > 0) { // Bursting Rot
@@ -332,7 +347,8 @@
       for (let i = 0; i < 10; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-200, 200), vy: rand(-200, 200), life: 0.4, color: '#b4e05a' });
     }
     for (let i = 0; i < 8; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.5, color: ENEMIES[e.type].color });
-    S.gems.push({ x: e.x, y: e.y, v: e.xp, big: e.xp >= 5 });
+    const tier = sporeTier();
+    S.gems.push({ x: e.x, y: e.y, v: e.xp * SPORES[tier].mult, big: e.xp >= 5, tier });
     if (Math.random() < 0.015) S.shrooms.push({ kind: 'red', x: e.x, y: e.y, life: 30 });
     if (e.type === 'troll') dropCrystal(e.x, e.y, true);
     else if (Math.random() < 0.025) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8), false);
@@ -1167,9 +1183,17 @@
 
     // Spores (xp gems)
     for (const g of S.gems) {
-      ctx.fillStyle = g.big ? '#ffb347' : '#9dff8a';
-      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
-      ctx.beginPath(); ctx.arc(g.x, g.y, g.big ? 5 : 3.2, 0, 7); ctx.fill();
+      const sp = SPORES[g.tier || 'green'], r = sp.r + (g.big ? 1.8 : 0);
+      ctx.fillStyle = g.tier === 'green' && g.big ? '#ffb347' : sp.color;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = g.tier === 'gold' ? 14 : 8;
+      ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, 7); ctx.fill();
+      if (g.tier === 'gold') { // golden spores twinkle
+        ctx.shadowBlur = 0; ctx.fillStyle = '#fff8d0';
+        ctx.beginPath(); ctx.arc(g.x - r * 0.3, g.y - r * 0.3, r * 0.35, 0, 7); ctx.fill();
+        const tw = 0.5 + 0.5 * Math.sin(S.t * 6 + g.x);
+        ctx.strokeStyle = `rgba(255, 240, 180, ${tw})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(g.x - r * 2, g.y); ctx.lineTo(g.x + r * 2, g.y); ctx.moveTo(g.x, g.y - r * 2); ctx.lineTo(g.x, g.y + r * 2); ctx.stroke();
+      }
     }
     ctx.shadowBlur = 0;
 

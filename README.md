@@ -5,6 +5,7 @@ A small Vampire Survivors–style game: you are a mushroom, and every hungry cre
 - **Move:** WASD / arrow keys, or drag on touch screens. **Pause:** P / Esc.
 - Spells fire automatically. Collect glowing spores to level up and choose upgrades.
 - Hungry enemies: slugs, bats, goblins (with forks), truffle boars, pixies and trolls (with spoons); they get tougher over time.
+- Spores: green ×1, pink ×2 and golden ×5 XP; pink and golden get more common the longer you survive.
 - Magic mushrooms: red heals, blue gives a speed boost, gold pulls in every spore.
 - Skills level up to 15. At skill levels 5, 10 and 15, pick a permanent modifier that changes how the skill behaves; modifiers branch, so your level 5 pick decides the level 10 options, and that pick decides the level 15 options (e.g. Mycelium Tendrils: Taproot for one big hit, or Fungal Web for more, weaker splits).
 - Propagate grows clones of you that use your skills; its modifiers turn them into exploding decoys or a protective colony.
