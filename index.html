@@ -273,6 +273,12 @@
       type: 'passive', apply: p => { p.magnet *= 1.4; }, remove: p => { p.magnet /= 1.4; } },
     { id: 'regen', name: 'Regrowth', desc: 'Regrow 0.5 HP per second.', max: 5,
       type: 'passive', apply: p => { p.regen += 0.5; }, remove: p => { p.regen -= 0.5; } },
+    { id: 'xpgain', name: 'Hungry Hyphae', desc: '+10% XP from spores (double XP at level 10).', max: 10,
+      info: p => `+${((p.upgrades.xpgain || 0) + 1) * 10}% XP`,
+      type: 'passive', apply: p => { p.xpMult += 0.1; }, remove: p => { p.xpMult -= 0.1; } },
+    { id: 'crystalluck', name: 'Geode Sense', desc: '+15% crystal drop chance (2.5× at level 10).', max: 10,
+      info: p => `+${((p.upgrades.crystalluck || 0) + 1) * 15}% crystal drops`,
+      type: 'passive', apply: p => { p.crystalLuck += 0.15; }, remove: p => { p.crystalLuck -= 0.15; } },
   ];
 
   // ---------- State ----------
@@ -281,7 +287,7 @@
     S = {
       t: 0, kills: 0, running: true, paused: false, spawnAcc: 0,
       player: {
-        x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0,
+        x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0, xpMult: 1, crystalLuck: 1,
         level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {}, mods: {}, crystals: { blue: 0, green: 0, red: 0, purple: 0 },
         w: {
           bolt: { level: 1, cd: 0 },
@@ -351,7 +357,7 @@
     S.gems.push({ x: e.x, y: e.y, v: e.xp * SPORES[tier].mult, big: e.xp >= 5, tier });
     if (Math.random() < 0.015) S.shrooms.push({ kind: 'red', x: e.x, y: e.y, life: 30 });
     if (e.type === 'troll') dropCrystal(e.x, e.y, true);
-    else if (Math.random() < 0.025) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8), false);
+    else if (Math.random() < 0.025 * S.player.crystalLuck) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8), false);
   }
 
   // ---------- Weapons ----------
@@ -696,10 +702,12 @@
     }
   }
 
+  // The merchant waits until you visit; if one is still waiting at the next 10 levels, that one stays
   function spawnMerchant() {
+    if (S.merchant) { S.banner = { txt: `🐸 ${MERCHANT} is still waiting for you. Follow the arrow!`, life: 4 }; return; }
     const p = S.player, a = Math.random() * Math.PI * 2;
-    S.merchant = { x: p.x + Math.cos(a) * 280, y: p.y + Math.sin(a) * 280, life: 60 };
-    S.banner = { txt: `🐸 ${MERCHANT} the crystal merchant has arrived! Follow the arrow.`, life: 5 };
+    S.merchant = { x: p.x + Math.cos(a) * 280, y: p.y + Math.sin(a) * 280 };
+    S.banner = { txt: `🐸 ${MERCHANT} the crystal merchant has arrived! Follow the arrow. He'll wait for you.`, life: 5 };
   }
 
   function openShop(msg = '') {
@@ -905,7 +913,7 @@
         const s = Math.max(250, 600 - d) * dt;
         g.x += (p.x - g.x) / (d || 1) * s; g.y += (p.y - g.y) / (d || 1) * s;
       }
-      if (d < p.r + 6) { g.taken = true; p.xp += g.v; }
+      if (d < p.r + 6) { g.taken = true; p.xp += g.v * p.xpMult; }
     }
     S.gems = S.gems.filter(g => !g.taken);
     if (S.gems.length > 600) S.gems.splice(0, S.gems.length - 600);
@@ -925,9 +933,7 @@
 
     // Merchant
     if (S.merchant) {
-      S.merchant.life -= dt;
-      if (S.merchant.life <= 0) { S.merchant = null; S.banner = { txt: `${MERCHANT} got tired of waiting and hopped away.`, life: 3 }; }
-      else if (dist2(S.merchant, p) < (p.r + 24) ** 2) return openShop(`"Ribbit! Crystals for power, little mushroom?"`);
+      if (dist2(S.merchant, p) < (p.r + 24) ** 2) return openShop(`"Ribbit! Crystals for power, little mushroom?"`);
     }
     if (S.banner && (S.banner.life -= dt) <= 0) S.banner = null;
 
@@ -1308,7 +1314,7 @@
     ctx.strokeStyle = '#555'; ctx.beginPath(); ctx.moveTo(18, 2); ctx.lineTo(22, -8); ctx.stroke();
     ctx.fillStyle = '#ffd84a'; ctx.shadowColor = '#ffd84a'; ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(22, -10, 3.5, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
     ctx.fillStyle = '#ffe08a'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center';
-    ctx.fillText(`SHOP · ${Math.ceil(m.life)}s`, 0, -32 - Math.sin(S.t * 4) * 2);
+    ctx.fillText('SHOP', 0, -32 - Math.sin(S.t * 4) * 2);
     ctx.restore();
   }
 
