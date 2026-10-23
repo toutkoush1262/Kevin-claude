@@ -526,11 +526,12 @@
   }
 
   // ---------- Crystals & merchant ----------
+  // weight = share of crystal drops in percent
   const CRYSTALS = {
-    blue:   { color: '#4da6ff', weight: 3, use: 'level up an active skill' },
-    green:  { color: '#5ee07a', weight: 3, use: 'level up a passive skill' },
-    red:    { color: '#ff4d5e', weight: 1, use: 'sacrifice a level from a skill you pick, then a random active skill and a random passive skill each gain a level' },
-    purple: { color: '#b36bff', weight: 1, use: 'level up any skill' },
+    blue:   { color: '#4da6ff', weight: 48, use: 'level up an active skill (costs the new level number in crystals)' },
+    green:  { color: '#5ee07a', weight: 48, use: 'level up a passive skill (costs the new level number in crystals)' },
+    red:    { color: '#ff4d5e', weight: 2, use: 'sacrifice a level from a skill you pick, then a random active skill and a random passive skill each gain a level' },
+    purple: { color: '#b36bff', weight: 2, use: 'level up any skill (always 1 crystal)' },
   };
   const MERCHANT = 'Old Toadley';
 
@@ -567,7 +568,7 @@
     const row = u => {
       const lvl = p.upgrades[u.id] || 0, maxed = lvl >= u.max, lk = u.type === 'active' ? 'blue' : 'green';
       return `<div class="srow"><div class="sname">${u.name}<small>${lvl === 0 ? 'Not learned' : `Lv ${lvl} / ${u.max}`}${maxed ? ' · MAX' : ''}</small></div><div class="sbtns">
-        ${btn(lk, 'up', u.id, maxed || !c[lk], '+1', `Spend a ${lk} crystal: +1 level`)}
+        ${btn(lk, 'up', u.id, maxed || c[lk] < lvl + 1, maxed ? '+1' : `+1 · ${lvl + 1}◆`, `Spend ${lvl + 1} ${lk} crystals: +1 level`)}
         ${btn('purple', 'up', u.id, maxed || !c.purple, '+1', 'Spend a purple crystal: +1 level')}
         ${btn('red', 'red', u.id, lvl === 0 || !c.red || !redPicks(u).length, '−1', 'Spend a red crystal: -1 level here, then +1 to a random active and a random passive skill')}
       </div></div>`;
@@ -603,7 +604,8 @@
       const lost = loseLevel(u);
       msg = `${u.name} −1${lost.length ? ` (lost modifier: ${lost.join(', ')})` : ''}. Gained: `;
     }
-    p.crystals[kind]--;
+    // Blue and green cost the level being bought (5 → 6 costs 6); red and purple cost 1
+    p.crystals[kind] -= kind === 'blue' || kind === 'green' ? (p.upgrades[id] || 0) + 1 : 1;
     msg += targets.map(t => `${t.name} → level ${(p.upgrades[t.id] || 0) + 1}`).join(' & ') + '!';
     // Apply each level; any that reaches 5/10/15 opens its modifier choice before returning to the shop
     const pending = targets.map(u => [u.id, gainLevel(u)]).filter(([, t]) => t >= 0);
