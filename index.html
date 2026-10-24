@@ -456,7 +456,7 @@
     for (let i = 0; i < 8; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.5, color: ENEMIES[e.type].color });
     const tier = sporeTier();
     // Spores are worth more from tougher enemies, matching how enemy health grows over the run
-    S.gems.push({ x: e.x, y: e.y, v: e.xp * SPORES[tier].mult * (e.toughness || 1), big: e.xp >= 5, tier });
+    S.gems.push({ x: e.x, y: e.y, v: e.xp * SPORES[tier].mult * (e.toughness || 1) * XP_GAIN, big: e.xp >= 5, tier });
     if (Math.random() < 0.005 * forageFreq('red')) spawnShroom('red', e.x, e.y);
     // Crystals: trolls have a 2% red and 2% purple chance (outside the budget); common blue/green drops follow the budget
     const budget = crystalBudgetMult();
@@ -717,6 +717,7 @@
   // level (XP_CURVE), so strong runs slow down while enemy XP growth keeps weaker runs moving. Tuned so a typical run
   // with no XP buffs reaches about level 60 at 20 minutes.
   const XP_CURVE = 0.6;
+  const XP_GAIN = 0.85; // all spores give 15% less XP than their base value
   const xpToNext = L => (L <= 5 ? [5, 10, 17, 26, 37][L - 1] : Math.round(37 + 4 * (L - 5) + XP_CURVE * (L - 5) ** 2));
   const menuOpen = () => !document.getElementById('levelup').classList.contains('hidden') || !document.getElementById('shop').classList.contains('hidden');
 
