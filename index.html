@@ -35,8 +35,18 @@
   .legend { font-size: 13px; color: #a9bfae; margin: 10px 0; line-height: 1.6; }
   .shopmsg { text-align: center; color: #ffe08a; min-height: 1.4em; margin: 6px 0; }
   .ssec { color: #ffe08a; font-weight: 700; margin: 12px 0 4px; }
-  .srow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid #26362c; }
+  .sitem { border-top: 1px solid #26362c; }
+  .srow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
+  .sname { all: unset; cursor: pointer; flex: 1; min-width: 0; color: #eee; font-size: 16px; }
+  .shop .sname, .shop .sname:hover { background: transparent; -webkit-tap-highlight-color: transparent; }
+  .sname:hover, .sname:focus-visible { color: #ffe08a; }
+  .sname:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; border-radius: 4px; }
+  .ihint { font-size: 12px; color: #8fb39a; }
   .sname small { display: block; color: #8fb39a; font-size: 12px; }
+  .stip { display: none; font-size: 13px; line-height: 1.5; color: #cfd8cf; background: #1d2a22; border: 1px solid #3f5a48; border-radius: 8px; padding: 8px 10px; margin: 0 0 8px; }
+  .stip b { color: #ffe08a; font-weight: 600; }
+  .sitem.open .stip { display: block; }
+  @media (hover: hover) { .sitem:hover .stip { display: block; } }
   .sbtns { display: flex; gap: 6px; flex-shrink: 0; }
   .cbtn { font-size: 13px; padding: 6px 10px; margin: 0; background: var(--c); color: #111; border-radius: 6px; }
   .cbtn:hover { background: var(--c); filter: brightness(1.15); }
@@ -740,6 +750,18 @@
     resumeGame();
   }
 
+  // Shop tooltips: what a skill does, what its next level gives, its modifiers so far and when the next one unlocks.
+  // Tap or click a skill name to pin it open (works on phones); with a mouse, hovering shows it too.
+  const shopTips = new Set();
+  function skillTip(u) {
+    const p = S.player, lvl = p.upgrades[u.id] || 0, lines = [u.desc];
+    if (lvl < u.max && u.info) lines.push(`<b>Next level:</b> ${u.info(p)}`);
+    const picked = (p.mods[u.id] || []).map(c => MOD_TREES[u.id][c].name);
+    if (picked.length) lines.push(`<b>Modifiers:</b> ${picked.join(', ')}`);
+    if (MOD_TREES[u.id] && lvl < u.max) lines.push(`<b>Next modifier choice:</b> level ${Math.floor(lvl / 5) * 5 + 5}`);
+    return lines.join('<br>');
+  }
+
   function renderShop(msg) {
     const p = S.player, c = p.crystals;
     const gem = k => `<span style="color:${CRYSTALS[k].color}">◆</span>`;
@@ -747,11 +769,11 @@
       `<button class="cbtn" style="--c:${CRYSTALS[kind].color}" data-act="${act}" data-id="${id}" data-kind="${kind}" title="${title}" ${disabled ? 'disabled' : ''}>${label}</button>`;
     const row = u => {
       const lvl = p.upgrades[u.id] || 0, maxed = lvl >= u.max, lk = u.type === 'active' ? 'blue' : 'green';
-      return `<div class="srow"><div class="sname">${u.name}<small>${lvl === 0 ? 'Not learned' : `Lv ${lvl} / ${u.max}`}${maxed ? ' · MAX' : ''}</small></div><div class="sbtns">
+      return `<div class="sitem${shopTips.has(u.id) ? ' open' : ''}"><div class="srow"><button type="button" class="sname" data-tip="${u.id}" aria-expanded="${shopTips.has(u.id)}">${u.name} <span class="ihint" aria-hidden="true">ⓘ</span><small>${lvl === 0 ? 'Not learned' : `Lv ${lvl} / ${u.max}`}${maxed ? ' · MAX' : ''}</small></button><div class="sbtns">
         ${btn(lk, 'up', u.id, maxed || c[lk] < lvl + 1, maxed ? '+1' : `+1 · ${lvl + 1}◆`, `Spend ${lvl + 1} ${lk} crystals: +1 level`)}
         ${btn('purple', 'up', u.id, maxed || !c.purple, '+1', 'Spend a purple crystal: +1 level')}
         ${btn('red', 'red', u.id, lvl === 0 || !c.red || !redPicks(u).length, '−1', 'Spend a red crystal: -1 level here, then +1 to a random active and a random passive skill')}
-      </div></div>`;
+      </div></div><div class="stip">${skillTip(u)}</div></div>`;
     };
     document.getElementById('shopBody').innerHTML = `
       <div class="wallet">${Object.keys(CRYSTALS).map(k => `<span>${gem(k)} ${c[k]}</span>`).join('')}</div>
@@ -798,6 +820,13 @@
     next();
   }
   document.getElementById('shopBody').addEventListener('click', e => {
+    const tip = e.target.closest('[data-tip]');
+    if (tip) {
+      const id = tip.dataset.tip, item = tip.closest('.sitem');
+      shopTips.has(id) ? shopTips.delete(id) : shopTips.add(id);
+      item.classList.toggle('open', shopTips.has(id)); tip.setAttribute('aria-expanded', shopTips.has(id));
+      return;
+    }
     const b = e.target.closest('button[data-act]');
     if (b && !b.disabled) shopAction(b.dataset.act, b.dataset.id, b.dataset.kind);
   });
