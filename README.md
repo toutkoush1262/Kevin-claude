@@ -13,3 +13,10 @@ A small Vampire Survivors–style game: you are a mushroom, and every hungry cre
 - Skills level up to 15. At skill levels 5, 10 and 15, pick a permanent modifier that changes how the skill behaves; modifiers branch, so your level 5 pick decides the level 10 options, and that pick decides the level 15 options (e.g. Mycelium Tendrils: Taproot for one big hit, or Fungal Web for more, weaker splits).
 - Propagate grows clones of you that use your skills; its modifiers turn them into exploding decoys or a protective colony.
 - Enemies drop colored crystals. Each 10-level shop cycle has a crystal budget (8 before the first shop, +1 per shop after, scaled by Geode Sense); trolls have a 2% red and 2% purple chance outside the budget. Every 10 player levels, Old Toadley the crystal merchant appears and waits until you visit; walk into him to spend crystals: blue levels an active skill and green a passive skill (each costs the new level number in crystals, so 5 → 6 costs 6), purple levels anything for 1 crystal, and red (red and purple only drop from trolls, 2% chance each) takes a level from a skill you pick, then levels a random active skill and a random passive skill.
+
+## Versions
+
+- **v0.0.2 — Forage update.** Magic mushrooms level up: every 5 of a color gives that color a Forage level (max 5) with a choice of stackable enhancements. Each color spawns on its own timer and gets rarer as a run goes on.
+- **v0.0.1** — Everything before Forage: six active skills with branching modifiers at levels 5/10/15, passives, crystals and Old Toadley's shop, pink and golden spores, and the tuned XP curve.
+
+Each version is a git tag (`v0.0.1`, `v0.0.2`); check one out to play that build.
