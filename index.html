@@ -602,7 +602,7 @@
   // XP needed to go from level L to L + 1: the first five levels are hand-set, then the cost grows a little faster each
   // level (XP_CURVE), so strong runs slow down while enemy XP growth keeps weaker runs moving. Tuned so a typical run
   // with no XP buffs reaches about level 60 at 20 minutes.
-  const XP_CURVE = 0.4;
+  const XP_CURVE = 0.6;
   const xpToNext = L => (L <= 5 ? [5, 10, 17, 26, 37][L - 1] : Math.round(37 + 4 * (L - 5) + XP_CURVE * (L - 5) ** 2));
   const menuOpen = () => !document.getElementById('levelup').classList.contains('hidden') || !document.getElementById('shop').classList.contains('hidden');
 
