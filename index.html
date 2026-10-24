@@ -715,9 +715,9 @@
   // ---------- Level up ----------
   // XP needed to go from level L to L + 1: the first five levels are hand-set, then the cost grows a little faster each
   // level (XP_CURVE), so strong runs slow down while enemy XP growth keeps weaker runs moving. Tuned so a typical run
-  // with no XP buffs reaches about level 60 at 20 minutes.
+  // with no XP buffs reaches about level 45 at 20 minutes.
   const XP_CURVE = 0.6;
-  const XP_LATE_FROM = 18, XP_LATE = 1; // extra cost per level past 18, growing each level, to slow mid-late game
+  const XP_LATE_FROM = 18, XP_LATE = 0.4; // extra cost per level past 18, growing each level, to slow mid-late game
   const XP_GAIN = 0.85; // all spores give 15% less XP than their base value
   const xpToNext = L => (L <= 5 ? [5, 10, 17, 26, 37][L - 1]
     : Math.round(37 + 4 * (L - 5) + XP_CURVE * (L - 5) ** 2 + XP_LATE * Math.max(0, L - XP_LATE_FROM) ** 2));
