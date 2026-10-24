@@ -276,7 +276,7 @@
     { id: 'xpgain', name: 'Hungry Hyphae', desc: '+10% XP from spores (double XP at level 10).', max: 10,
       info: p => `+${((p.upgrades.xpgain || 0) + 1) * 10}% XP`,
       type: 'passive', apply: p => { p.xpMult += 0.1; }, remove: p => { p.xpMult -= 0.1; } },
-    { id: 'crystalluck', name: 'Geode Sense', desc: '+15% crystal drop chance (2.5× at level 10).', max: 10,
+    { id: 'crystalluck', name: 'Geode Sense', desc: '+15% crystal drops, including the crystals each shop visit can bring (2.5× at level 10).', max: 10,
       info: p => `+${((p.upgrades.crystalluck || 0) + 1) * 15}% crystal drops`,
       type: 'passive', apply: p => { p.crystalLuck += 0.15; }, remove: p => { p.crystalLuck -= 0.15; } },
   ];
@@ -298,7 +298,7 @@
           clone: { level: 0 },
         },
       },
-      enemies: [], bullets: [], tendrils: [], delayed: [], clones: [], crystals: [], merchant: null, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
+      enemies: [], bullets: [], tendrils: [], delayed: [], clones: [], crystals: [], merchant: null, shopCycle: 0, cycleDrops: 0, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
       shroomTimer: 10,
     };
   }
@@ -356,8 +356,14 @@
     const tier = sporeTier();
     S.gems.push({ x: e.x, y: e.y, v: e.xp * SPORES[tier].mult, big: e.xp >= 5, tier });
     if (Math.random() < 0.015) S.shrooms.push({ kind: 'red', x: e.x, y: e.y, life: 30 });
-    if (e.type === 'troll') dropCrystal(e.x, e.y, true);
-    else if (Math.random() < 0.025 * S.player.crystalLuck) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8), false);
+    // Crystals: trolls have a 2% red and 2% purple chance (outside the budget); common blue/green drops follow the budget
+    const budget = crystalBudgetMult();
+    if (e.type === 'troll') {
+      const r = Math.random();
+      if (r < 0.02) dropCrystal(e.x, e.y, 'red');
+      else if (r < 0.04) dropCrystal(e.x, e.y, 'purple');
+      else if (Math.random() < budget) dropCrystal(e.x, e.y, Math.random() < 0.5 ? 'blue' : 'green');
+    } else if (Math.random() < 0.025 * S.player.crystalLuck * budget) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8), Math.random() < 0.5 ? 'blue' : 'green');
   }
 
   // ---------- Weapons ----------
@@ -671,20 +677,24 @@
   }
 
   // ---------- Crystals & merchant ----------
-  // weight = share of a troll's crystal drop in percent; red and purple only ever come from trolls
   const CRYSTALS = {
-    blue:   { color: '#4da6ff', weight: 48, use: 'level up an active skill (costs the new level number in crystals)' },
-    green:  { color: '#5ee07a', weight: 48, use: 'level up a passive skill (costs the new level number in crystals)' },
-    red:    { color: '#ff4d5e', weight: 2, use: 'sacrifice a level from a skill you pick, then a random active skill and a random passive skill each gain a level' },
-    purple: { color: '#b36bff', weight: 2, use: 'level up any skill (always 1 crystal)' },
+    blue:   { color: '#4da6ff', use: 'level up an active skill (costs the new level number in crystals)' },
+    green:  { color: '#5ee07a', use: 'level up a passive skill (costs the new level number in crystals)' },
+    red:    { color: '#ff4d5e', use: 'sacrifice a level from a skill you pick, then a random active skill and a random passive skill each gain a level' },
+    purple: { color: '#b36bff', use: 'level up any skill (always 1 crystal)' },
   };
   const MERCHANT = 'Old Toadley';
 
-  function dropCrystal(x, y, fromTroll) {
-    const kinds = Object.keys(CRYSTALS).filter(k => fromTroll || k === 'blue' || k === 'green'), total = kinds.reduce((s, k) => s + CRYSTALS[k].weight, 0);
-    let r = Math.random() * total, kind = kinds[0];
-    for (const k of kinds) { if ((r -= CRYSTALS[k].weight) <= 0) { kind = k; break; } }
+  // Each shop cycle (10 player levels) has a budget of common crystals: 8 before the first shop, +1 per shop after,
+  // scaled by Geode Sense. Under budget, drops are unchanged; past it they drop to a 5% trickle until the next shop.
+  function crystalBudgetMult() {
+    const budget = (8 + S.shopCycle) * S.player.crystalLuck, n = S.cycleDrops;
+    return n < budget ? 1 : 0.05;
+  }
+
+  function dropCrystal(x, y, kind) {
     const rare = kind === 'red' || kind === 'purple';
+    if (!rare) S.cycleDrops++;
     S.crystals.push({ x, y, kind, bob: Math.random() * 6, rare });
     if (rare) {
       S.banner = { txt: `✦ A rare ${kind} crystal dropped! ✦`, life: 4, color: CRYSTALS[kind].color };
@@ -707,6 +717,7 @@
 
   // The merchant waits until you visit; if one is still waiting at the next 10 levels, that one stays
   function spawnMerchant() {
+    S.shopCycle++; S.cycleDrops = 0;
     if (S.merchant) { S.banner = { txt: `🐸 ${MERCHANT} is still waiting for you. Follow the arrow!`, life: 4 }; return; }
     const p = S.player, a = Math.random() * Math.PI * 2;
     S.merchant = { x: p.x + Math.cos(a) * 280, y: p.y + Math.sin(a) * 280 };
