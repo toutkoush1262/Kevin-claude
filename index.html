@@ -304,12 +304,10 @@
   }
 
   // ---------- Spawning ----------
-  function spawnEnemy() {
+  // Normally spawns just off screen; the opening wave passes its own type, angle and distance
+  function spawnEnemy(type = spawnTable(S.t), ang = Math.random() * Math.PI * 2, d = Math.max(W, H) * 0.6 + 60) {
     const p = S.player;
-    const type = spawnTable(S.t);
     const def = ENEMIES[type];
-    const ang = Math.random() * Math.PI * 2;
-    const d = Math.max(W, H) * 0.6 + 60;
     const scale = 1 + S.t / 150;
     S.enemies.push({
       type, x: p.x + Math.cos(ang) * d, y: p.y + Math.sin(ang) * d,
@@ -1428,6 +1426,9 @@
 
   function start() {
     newGame(); initUpgradeCounts();
+    // Opening wave: a ring of slugs already on screen, close enough to see but out of biting range
+    const ring = Math.min(W, H) * 0.32;
+    for (let i = 0; i < 8; i++) spawnEnemy('slug', (i / 8) * Math.PI * 2 + rand(-0.2, 0.2), Math.max(130, ring * rand(0.85, 1.15)));
     ['menu', 'gameover', 'levelup', 'shop'].forEach(id => document.getElementById(id).classList.add('hidden'));
     last = performance.now();
   }

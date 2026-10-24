@@ -4,7 +4,7 @@ A small Vampire Survivors–style game: you are a mushroom, and every hungry cre
 
 - **Move:** WASD / arrow keys, or drag on touch screens. **Pause:** P / Esc.
 - Spells fire automatically. Collect glowing spores to level up and choose upgrades.
-- Hungry enemies: slugs, bats, goblins (with forks), truffle boars, pixies and trolls (with spoons); they get tougher over time.
+- Hungry enemies: slugs, bats, goblins (with forks), truffle boars, pixies and trolls (with spoons); they get tougher over time. A ring of slugs is already on screen when a run starts.
 - Spores: green ×1, pink ×2 and golden ×5 of an enemy's XP, which grows with how tough enemies have become; pink and golden get more common the longer you survive. XP per level keeps the first five levels as before, then grows gently.
 - Passives Hungry Hyphae (+10% XP per level) and Geode Sense (+15% crystal drops per level) go to level 10.
 - Magic mushrooms: red heals, blue gives a speed boost, gold pulls in every spore.
