@@ -264,35 +264,35 @@
 
   const UPGRADES = [
     { id: 'bolt', name: 'Spore Shot', desc: 'Fires more spore shots, faster.', max: SKILL_MAX,
-      type: 'active', apply: p => { p.w.bolt.level++; }, remove: p => { p.w.bolt.level--; } },
+      type: 'active', apply: p => { p.w.bolt.level++; } },
     { id: 'orbit', name: 'Mushroom Buddies', desc: 'Little mushroom friends circle you and bonk hungry foes.', max: SKILL_MAX,
-      type: 'active', apply: p => { p.w.orbit.level++; }, remove: p => { p.w.orbit.level--; } },
+      type: 'active', apply: p => { p.w.orbit.level++; } },
     { id: 'aura', name: 'Puffball Cloud', desc: 'A poison spore cloud damages nearby enemies.', max: SKILL_MAX,
-      type: 'active', apply: p => { p.w.aura.level++; }, remove: p => { p.w.aura.level--; } },
+      type: 'active', apply: p => { p.w.aura.level++; } },
     { id: 'tendril', name: 'Mycelium Tendrils', desc: 'A root tendril lashes an enemy, then branches off to strike two more.', max: SKILL_MAX,
       info: p => { const c = tendrilCfg(p, (p.upgrades.tendril || 0) + 1); return c.depth === 0 ? `single target · 3× damage` : `${c.branches} branches · ${c.depth} split${c.depth > 1 ? 's' : ''} · up to ${c.maxHits} hits`; },
-      type: 'active', apply: p => { p.w.tendril.level++; }, remove: p => { p.w.tendril.level--; } },
+      type: 'active', apply: p => { p.w.tendril.level++; } },
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
-      type: 'active', apply: p => { p.w.thorn.level++; }, remove: p => { p.w.thorn.level--; } },
+      type: 'active', apply: p => { p.w.thorn.level++; } },
     { id: 'clone', name: 'Propagate', desc: 'Grows a clone of you that follows you around and uses your skills at reduced strength.', max: SKILL_MAX,
       info: p => `${Math.round(cloneEff((p.upgrades.clone || 0) + 1) * 100)}% strength`,
-      type: 'active', apply: p => { p.w.clone.level++; }, remove: p => { p.w.clone.level--; } },
+      type: 'active', apply: p => { p.w.clone.level++; } },
     { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
-      type: 'passive', apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); }, remove: p => { p.maxHp -= 20; p.hp = Math.min(p.hp, p.maxHp); } },
+      type: 'passive', apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); } },
     { id: 'speed', name: 'Speedy Roots', desc: '+10% movement speed.', max: 5,
-      type: 'passive', apply: p => { p.speed *= 1.1; }, remove: p => { p.speed /= 1.1; } },
+      type: 'passive', apply: p => { p.speed *= 1.1; } },
     { id: 'might', name: 'Toxic Gills', desc: '+15% damage for all attacks.', max: 6,
-      type: 'passive', apply: p => { p.might *= 1.15; }, remove: p => { p.might /= 1.15; } },
+      type: 'passive', apply: p => { p.might *= 1.15; } },
     { id: 'magnet', name: 'Mycelium Net', desc: '+40% spore pickup range.', max: 4,
-      type: 'passive', apply: p => { p.magnet *= 1.4; }, remove: p => { p.magnet /= 1.4; } },
+      type: 'passive', apply: p => { p.magnet *= 1.4; } },
     { id: 'regen', name: 'Regrowth', desc: 'Regrow 0.5 HP per second.', max: 5,
-      type: 'passive', apply: p => { p.regen += 0.5; }, remove: p => { p.regen -= 0.5; } },
+      type: 'passive', apply: p => { p.regen += 0.5; } },
     { id: 'xpgain', name: 'Hungry Hyphae', desc: '+10% XP from spores (double XP at level 10).', max: 10,
       info: p => `+${((p.upgrades.xpgain || 0) + 1) * 10}% XP`,
-      type: 'passive', apply: p => { p.xpMult += 0.1; }, remove: p => { p.xpMult -= 0.1; } },
+      type: 'passive', apply: p => { p.xpMult += 0.1; } },
     { id: 'crystalluck', name: 'Geode Sense', desc: '+15% crystal drops, including the crystals each shop visit can bring (2.5× at level 10).', max: 10,
       info: p => `+${((p.upgrades.crystalluck || 0) + 1) * 15}% crystal drops`,
-      type: 'passive', apply: p => { p.crystalLuck += 0.15; }, remove: p => { p.crystalLuck -= 0.15; } },
+      type: 'passive', apply: p => { p.crystalLuck += 0.15; } },
   ];
 
   // ---------- State ----------
@@ -712,16 +712,6 @@
     const tier = MOD_TREES[u.id] ? modTierFor(p.upgrades[u.id]) : -1;
     return tier >= 0 && (p.mods[u.id] || []).length === tier ? tier : -1;
   }
-  // Removes one level from a skill, dropping any modifier whose level is no longer reached; returns lost modifier names
-  function loseLevel(u) {
-    const p = S.player;
-    u.remove(p); p.upgrades[u.id]--;
-    const mods = p.mods[u.id] || [], keep = Math.floor(p.upgrades[u.id] / 5);
-    const lost = mods.slice(keep).map(c => MOD_TREES[u.id][c].name);
-    if (mods.length) p.mods[u.id] = mods.slice(0, keep);
-    return lost;
-  }
-
   function resumeGame() {
     const p = S.player;
     document.getElementById('levelup').classList.add('hidden');
@@ -784,8 +774,8 @@
   const CRYSTALS = {
     blue:   { color: '#4da6ff', use: 'level up an active skill (costs the new level number in crystals)' },
     green:  { color: '#5ee07a', use: 'level up a passive skill (costs the new level number in crystals)' },
-    red:    { color: '#ff4d5e', use: 'sacrifice a level from a skill you pick, then a random active skill and a random passive skill each gain a level' },
-    purple: { color: '#b36bff', use: 'level up any skill (always 1 crystal)' },
+    red:    { color: '#ff4d5e', use: 'rare. Old Toadley will have a use for these soon, so hang on to them' },
+    purple: { color: '#b36bff', use: 'rare. Old Toadley will have a use for these soon, so hang on to them' },
   };
   const MERCHANT = 'Old Toadley';
 
@@ -861,8 +851,6 @@
       const lvl = p.upgrades[u.id] || 0, maxed = lvl >= u.max, lk = u.type === 'active' ? 'blue' : 'green';
       return `<div class="sitem${shopTips.has(u.id) ? ' open' : ''}"><div class="srow"><button type="button" class="sname" data-tip="${u.id}" aria-expanded="${shopTips.has(u.id)}">${u.name} <span class="ihint" aria-hidden="true">ⓘ</span><small>${lvl === 0 ? 'Not learned' : `Lv ${lvl} / ${u.max}`}${maxed ? ' · MAX' : ''}</small></button><div class="sbtns">
         ${btn(lk, 'up', u.id, maxed || c[lk] < lvl + 1, maxed ? '+1' : `+1 · ${lvl + 1}◆`, `Spend ${lvl + 1} ${lk} crystals: +1 level`)}
-        ${btn('purple', 'up', u.id, maxed || !c.purple, '+1', 'Spend a purple crystal: +1 level')}
-        ${btn('red', 'red', u.id, lvl === 0 || !c.red || !redPicks(u).length, '−1', 'Spend a red crystal: -1 level here, then +1 to a random active and a random passive skill')}
       </div></div><div class="stip">${skillTip(u)}</div></div>`;
     };
     document.getElementById('shopBody').innerHTML = `
@@ -874,31 +862,12 @@
       <div class="ssec">Passive skills</div>${UPGRADES.filter(u => u.type === 'passive').map(row).join('')}`;
   }
 
-  // Red crystal targets: one random active and one random passive skill (never the sacrificed one) with room to grow,
-  // preferring ones you already have
-  function redPicks(sacrificed) {
-    const p = S.player, picks = [];
-    for (const type of ['active', 'passive']) {
-      const room = UPGRADES.filter(u => u !== sacrificed && u.type === type && (p.upgrades[u.id] || 0) < u.max);
-      const owned = room.filter(u => (p.upgrades[u.id] || 0) > 0);
-      const options = owned.length ? owned : room;
-      if (options.length) picks.push(options[Math.floor(Math.random() * options.length)]);
-    }
-    return picks;
-  }
-
   function shopAction(act, id, kind) {
     const p = S.player;
-    const u = UPGRADES.find(x => x.id === id);
-    let targets = [u], msg = '';
-    if (act === 'red') {
-      targets = redPicks(u);
-      const lost = loseLevel(u);
-      msg = `${u.name} −1${lost.length ? ` (lost modifier: ${lost.join(', ')})` : ''}. Gained: `;
-    }
-    // Blue and green cost the level being bought (5 → 6 costs 6); red and purple cost 1
-    p.crystals[kind] -= kind === 'blue' || kind === 'green' ? (p.upgrades[id] || 0) + 1 : 1;
-    msg += targets.map(t => `${t.name} → level ${(p.upgrades[t.id] || 0) + 1}`).join(' & ') + '!';
+    const u = UPGRADES.find(x => x.id === id), targets = [u];
+    // Blue (active) and green (passive) crystals cost the level being bought: 5 -> 6 costs 6
+    p.crystals[kind] -= (p.upgrades[id] || 0) + 1;
+    const msg = targets.map(t => `${t.name} → level ${(p.upgrades[t.id] || 0) + 1}`).join(' & ') + '!';
     // Apply each level; any that reaches 5/10/15 opens its modifier choice before returning to the shop
     const pending = targets.map(u => [u.id, gainLevel(u)]).filter(([, t]) => t >= 0);
     const next = () => {
@@ -1513,7 +1482,7 @@
       ctx.lineWidth = 8; ctx.strokeStyle = '#111'; ctx.strokeText(t.txt, 0, 0);
       ctx.shadowColor = t.color; ctx.shadowBlur = 24; ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0);
       ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = 'bold 16px system-ui';
-      ctx.fillText(t.txt.includes('PURPLE') ? 'Level up any skill for just 1 crystal!' : 'Sacrifice a level for two random level-ups!', 0, 34);
+      ctx.fillText('Old Toadley will want to see this…', 0, 34);
       ctx.restore(); ctx.globalAlpha = 1;
     }
     // HP bar under player
