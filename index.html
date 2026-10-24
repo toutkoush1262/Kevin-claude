@@ -520,7 +520,7 @@
     if (w.bolt.level > 0) {
       w.bolt.cd -= dt;
       if (w.bolt.cd <= 0) {
-        w.bolt.cd = Math.max(0.2, 0.9 - w.bolt.level * 0.05) * (hasMod(p, 'bolt', 'rapid') ? 0.6 : 1);
+        w.bolt.cd = w.bolt.cdMax = Math.max(0.2, 0.9 - w.bolt.level * 0.05) * (hasMod(p, 'bolt', 'rapid') ? 0.6 : 1);
         let count = 1 + Math.floor(w.bolt.level / 3), spread = 0.18, dmg = (8 + w.bolt.level * 2) * p.might, pierce = 1 + Math.floor(w.bolt.level / 4), r = 5;
         if (hasMod(p, 'bolt', 'scatter')) { count += 2; spread = 0.3; dmg *= 0.7; }
         if (hasMod(p, 'bolt', 'heavy')) { count = 1; dmg *= 2.5; r = 9; }
@@ -543,7 +543,7 @@
     if (w.thorn.level > 0) {
       w.thorn.cd -= dt;
       if (w.thorn.cd <= 0) {
-        w.thorn.cd = Math.max(0.8, 3 - w.thorn.level * 0.15) * (hasMod(p, 'thorn', 'barrage') ? 0.5 : 1);
+        w.thorn.cd = w.thorn.cdMax = Math.max(0.8, 3 - w.thorn.level * 0.15) * (hasMod(p, 'thorn', 'barrage') ? 0.5 : 1);
         fireThornRing(p, 0);
         if (hasMod(p, 'thorn', 'double')) later(0.3, () => fireThornRing(p, 0.5));
       }
@@ -575,7 +575,7 @@
         const first = nearestEnemy(280, p);
         if (!first) w.tendril.cd = 0.3;
         else {
-          w.tendril.cd = tendrilCooldown(w.tendril.level) * (hasMod(p, 'tendril', 'quick') ? 0.5 : 1);
+          w.tendril.cd = w.tendril.cdMax = tendrilCooldown(w.tendril.level) * (hasMod(p, 'tendril', 'quick') ? 0.5 : 1);
           const dmg = tendrilDamage(w.tendril.level) * p.might * cfg.dmgMult;
           const hit = new Set([first]);
           tendrilStrike(p, p.x, p.y, first, dmg, thick);
@@ -1454,6 +1454,69 @@
     ctx.restore();
   }
 
+  // Small canvas icons for each skill, drawn centered at (x, y) in a box of size s
+  function drawSkillIcon(id, x, y, s) {
+    const r = s * 0.32;
+    ctx.save(); ctx.translate(x, y); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const dot = (dx, dy, rr, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(dx, dy, rr, 0, 7); ctx.fill(); };
+    switch (id) {
+      case 'bolt': ctx.shadowColor = '#b066ff'; ctx.shadowBlur = 8; dot(r * 0.2, -r * 0.2, r * 0.55, '#d9a6ff'); ctx.shadowBlur = 0; dot(-r * 0.5, r * 0.5, r * 0.25, '#b98ae6'); dot(-r * 0.9, r * 0.9, r * 0.14, '#8f6bb8'); break;
+      case 'orbit': ctx.strokeStyle = '#8a6bb8'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke(); drawMushroom(r * 0.7, r * 0.2, r * 0.9, '#c25bff', '#f3d4ff'); drawMushroom(-r * 0.7, -r * 0.05, r * 0.9, '#c25bff', '#f3d4ff'); break;
+      case 'aura': ctx.fillStyle = 'rgba(170,220,90,0.45)'; ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0, 7); ctx.fill(); for (let i = 0; i < 6; i++) { const a = i * 1.05; dot(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.13, '#d8f5a0'); } break;
+      case 'thorn': ctx.strokeStyle = '#7bd36b'; ctx.lineWidth = 2; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.35, Math.sin(a) * r * 0.35); ctx.lineTo(Math.cos(a) * r * 1.05, Math.sin(a) * r * 1.05); ctx.stroke(); } dot(0, 0, r * 0.25, '#4f8f45'); break;
+      case 'tendril': ctx.strokeStyle = '#efe6d0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r, r); ctx.quadraticCurveTo(-r * 0.2, r * 0.2, 0, 0); ctx.quadraticCurveTo(r * 0.4, -r * 0.2, r, -r * 0.6); ctx.moveTo(0, 0); ctx.quadraticCurveTo(r * 0.3, r * 0.5, r * 0.9, r * 0.6); ctx.stroke(); dot(r, -r * 0.6, 2.2, '#f6f0dc'); dot(r * 0.9, r * 0.6, 2.2, '#f6f0dc'); break;
+      case 'clone': ctx.globalAlpha = 0.55; drawMushroom(r * 0.45, r * 0.75, r * 1.3, '#d968c4'); ctx.globalAlpha = 1; drawMushroom(-r * 0.35, r * 0.85, r * 1.4, '#e8423b'); break;
+      case 'hp': ctx.fillStyle = '#ff6b6b'; ctx.beginPath(); ctx.moveTo(0, r * 0.9); ctx.bezierCurveTo(-r * 1.4, -r * 0.1, -r * 0.6, -r * 1.1, 0, -r * 0.35); ctx.bezierCurveTo(r * 0.6, -r * 1.1, r * 1.4, -r * 0.1, 0, r * 0.9); ctx.fill(); break;
+      case 'speed': ctx.strokeStyle = '#6bc7ff'; ctx.lineWidth = 2.2; for (const dy of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.moveTo(-r, dy * r); ctx.lineTo(r * (0.3 - Math.abs(dy) * 0.5), dy * r); ctx.stroke(); } ctx.beginPath(); ctx.moveTo(r * 0.3, -r * 0.6); ctx.lineTo(r, 0); ctx.lineTo(r * 0.3, r * 0.6); ctx.stroke(); break;
+      case 'might': ctx.fillStyle = '#b4e05a'; ctx.beginPath(); ctx.moveTo(-r * 0.3, -r); ctx.lineTo(r * 0.3, -r); ctx.lineTo(r * 0.3, -r * 0.3); ctx.lineTo(r * 0.9, r * 0.9); ctx.lineTo(-r * 0.9, r * 0.9); ctx.lineTo(-r * 0.3, -r * 0.3); ctx.closePath(); ctx.fill(); dot(-r * 0.2, r * 0.45, r * 0.15, '#3c5a1e'); dot(r * 0.3, r * 0.2, r * 0.11, '#3c5a1e'); break;
+      case 'magnet': ctx.strokeStyle = '#d8ccb0'; ctx.lineWidth = 1.4; for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r); ctx.lineTo(-Math.cos(a) * r, -Math.sin(a) * r); ctx.stroke(); } ctx.beginPath(); ctx.arc(0, 0, r * 0.55, 0, 7); ctx.stroke(); dot(0, 0, r * 0.2, '#9dff8a'); break;
+      case 'regen': ctx.fillStyle = '#5ee07a'; ctx.beginPath(); ctx.moveTo(-r * 0.8, r * 0.8); ctx.quadraticCurveTo(-r, -r, r * 0.9, -r * 0.9); ctx.quadraticCurveTo(r * 0.8, r * 0.9, -r * 0.8, r * 0.8); ctx.fill(); ctx.strokeStyle = '#2f7a45'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-r * 0.8, r * 0.8); ctx.lineTo(r * 0.5, -r * 0.5); ctx.stroke(); break;
+      case 'xpgain': ctx.shadowColor = '#9dff8a'; ctx.shadowBlur = 8; dot(0, 0, r * 0.45, '#9dff8a'); dot(-r * 0.75, r * 0.5, r * 0.22, '#ff8ad8'); dot(r * 0.75, -r * 0.55, r * 0.25, '#ffd84a'); ctx.shadowBlur = 0; break;
+      case 'crystalluck': drawCrystal(0, 0, r * 0.75, '#4da6ff'); break;
+    }
+    ctx.restore();
+  }
+
+  // Bottom-centre skill bar: active slots (with cooldown sweeps) above, passive slots below; empty slots are outlines
+  function drawSkillBar() {
+    const p = S.player, small = W < 520;
+    const rows = [['active', small ? 38 : 46], ['passive', small ? 28 : 32]];
+    let y = H - 10;
+    for (const [type, size] of [...rows].reverse()) {
+      const owned = UPGRADES.filter(u => u.type === type && (p.upgrades[u.id] || 0) > 0);
+      const slots = p.slots[type], gap = 5, total = slots * size + (slots - 1) * gap;
+      let x = W / 2 - total / 2;
+      y -= size;
+      for (let i = 0; i < slots; i++, x += size + gap) {
+        const u = owned[i], cx = x + size / 2, cy = y + size / 2;
+        ctx.fillStyle = u ? 'rgba(14, 24, 18, 0.82)' : 'rgba(14, 24, 18, 0.35)';
+        ctx.strokeStyle = u ? (type === 'active' ? '#4da6ff' : '#5ee07a') : 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = u ? 1.5 : 1;
+        ctx.beginPath(); ctx.roundRect(x, y, size, size, 7); ctx.fill(); ctx.stroke();
+        if (!u) continue;
+        drawSkillIcon(u.id, cx, cy, size);
+        // cooldown: a dark wedge for the time remaining, sweeping away clockwise
+        const w = p.w[u.id];
+        let frac = 0;
+        if (w && w.cdMax && w.cd > 0) frac = Math.min(1, w.cd / w.cdMax);
+        if (u.id === 'clone') { const c = S.clones[0]; if (c && c.dead && hasMod(p, 'clone', 'trauma')) frac = Math.min(1, c.respawn / (hasMod(p, 'clone', 'extratrauma') ? 5 : 10)); }
+        if (frac > 0.02) {
+          ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, size, size, 7); ctx.clip();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, size, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          if (w && w.cd >= 1) { ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(size * 0.32)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText(Math.ceil(w.cd), cx, cy + size * 0.11); }
+        }
+        // level badge
+        const lvl = String(p.upgrades[u.id]);
+        ctx.font = `bold ${size < 34 ? 9 : 10}px system-ui`; ctx.textAlign = 'right';
+        ctx.lineWidth = 3; ctx.strokeStyle = '#0e1812'; ctx.strokeText(lvl, x + size - 3, y + size - 3);
+        ctx.fillStyle = '#ffe08a'; ctx.fillText(lvl, x + size - 3, y + size - 3);
+      }
+      y -= 6;
+    }
+  }
+
   function drawHUD() {
     const p = S.player;
     // XP bar
@@ -1527,6 +1590,7 @@
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold 32px system-ui'; ctx.fillText('Paused (P)', W / 2, H / 2);
     }
+    drawSkillBar();
     // Touch joystick
     if (touch.active) {
       ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2;
