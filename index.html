@@ -42,6 +42,7 @@
   .sname:hover, .sname:focus-visible { color: #ffe08a; }
   .sname:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; border-radius: 4px; }
   .ihint { font-size: 12px; color: #8fb39a; }
+  .sname.static { cursor: default; color: #eee; }
   .sname small { display: block; color: #8fb39a; font-size: 12px; }
   .stip { display: none; font-size: 13px; line-height: 1.5; color: #cfd8cf; background: #1d2a22; border: 1px solid #3f5a48; border-radius: 8px; padding: 8px 10px; margin: 0 0 8px; }
   .stip b { color: #ffe08a; font-weight: 600; }
@@ -52,6 +53,7 @@
   .cbtn:hover { background: var(--c); filter: brightness(1.15); }
   .cbtn:disabled { opacity: 0.25; cursor: default; filter: none; }
   #shopClose { display: block; margin: 14px auto 0; }
+  .slotinfo { margin: -8px 0 12px; font-size: 13px; color: #8fb39a; min-height: 1.2em; }
   .version { margin-top: 18px; font-size: 13px; color: #6f8a77; }
   .card.forage { border-color: var(--fc); }
   .card.forage b { color: var(--fc); }
@@ -74,11 +76,12 @@
     <span style="color:#ff6b6b">Red</span> heals · <span style="color:#6bc7ff">Blue</span> speed ·
     <span style="color:#ffd84a">Gold</span> pulls in all spores</p>
   <button id="startBtn">Start</button>
-  <p class="version">v0.0.2 · Forage update</p>
+  <p class="version">v0.0.3 · Skill slot update</p>
 </div>
 
 <div id="levelup" class="overlay hidden">
   <h2 id="levelTitle">Level up! Choose a blessing</h2>
+  <p id="slotInfo" class="slotinfo"></p>
   <div id="cards" class="cards"></div>
 </div>
 
@@ -301,7 +304,7 @@
     S = {
       t: 0, kills: 0, running: true, paused: false, spawnAcc: 0,
       player: {
-        x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0, xpMult: 1, crystalLuck: 1,
+        x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0, xpMult: 1, crystalLuck: 1, slots: { ...SLOT_START },
         level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {}, mods: {}, crystals: { blue: 0, green: 0, red: 0, purple: 0 },
         w: {
           bolt: { level: 1, cd: 0 },
@@ -400,6 +403,7 @@
 
   function showForageChoice(t) {
     const f = S.forage[t];
+    document.getElementById('slotInfo').textContent = '';
     S.paused = true;
     document.getElementById('levelTitle').textContent = `Forage: ${SHROOM_TYPES[t].name} reached level ${f.level}! Choose an enhancement`;
     const pool = FORAGE_POOL.filter(o => (!o.type || o.type === t) && (!o.max || forageStacks(t, o.id) < o.max));
@@ -697,6 +701,17 @@
     }
   }
 
+  // ---------- Skill slots ----------
+  // You can hold 4 active and 4 passive skills; more slots are bought in the shop with rare crystals
+  // (purple for active slots, red for passive slots). Prices rise with each slot bought.
+  const SLOT_START = { active: 4, passive: 4 };
+  const SLOT_COST = { active: { kind: 'purple', prices: [2, 3] }, passive: { kind: 'red', prices: [2, 3, 4] } };
+  const slotsUsed = type => UPGRADES.filter(u => u.type === type && (S.player.upgrades[u.id] || 0) > 0).length;
+  const slotsMax = type => SLOT_START[type] + SLOT_COST[type].prices.length;
+  const nextSlotPrice = type => SLOT_COST[type].prices[S.player.slots[type] - SLOT_START[type]]; // undefined once all are bought
+  const canLearn = u => (S.player.upgrades[u.id] || 0) > 0 || slotsUsed(u.type) < S.player.slots[u.type];
+  const slotSummary = () => `Skill slots: active ${slotsUsed('active')}/${S.player.slots.active} · passive ${slotsUsed('passive')}/${S.player.slots.passive}`;
+
   // ---------- Level up ----------
   // XP needed to go from level L to L + 1: the first five levels are hand-set, then the cost grows a little faster each
   // level (XP_CURVE), so strong runs slow down while enemy XP growth keeps weaker runs moving. Tuned so a typical run
@@ -729,7 +744,8 @@
     if (p.level % 10 === 0) spawnMerchant();
     S.paused = true;
     document.getElementById('levelTitle').textContent = 'Level up! Choose a blessing';
-    const pool = UPGRADES.filter(u => (p.upgrades[u.id] || 0) < u.max);
+    const pool = UPGRADES.filter(u => (p.upgrades[u.id] || 0) < u.max && canLearn(u));
+    document.getElementById('slotInfo').textContent = slotSummary();
     const picks = [];
     while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
     const cards = document.getElementById('cards');
@@ -752,6 +768,7 @@
   // Shown right after a skill reaches level 5, 10 or 15: pick one of that tier's two modifiers, then onDone()
   function showModifierChoice(k, tier, onDone) {
     const p = S.player;
+    document.getElementById('slotInfo').textContent = '';
     document.getElementById('levelTitle').textContent = `${SKILL_NAMES[k]} reached level ${p.w[k].level}! Choose a modifier`;
     const cards = document.getElementById('cards');
     cards.innerHTML = '';
@@ -774,8 +791,8 @@
   const CRYSTALS = {
     blue:   { color: '#4da6ff', use: 'level up an active skill (costs the new level number in crystals)' },
     green:  { color: '#5ee07a', use: 'level up a passive skill (costs the new level number in crystals)' },
-    red:    { color: '#ff4d5e', use: 'rare. Old Toadley will have a use for these soon, so hang on to them' },
-    purple: { color: '#b36bff', use: 'rare. Old Toadley will have a use for these soon, so hang on to them' },
+    red:    { color: '#ff4d5e', use: 'rare. Unlocks extra passive skill slots' },
+    purple: { color: '#b36bff', use: 'rare. Unlocks extra active skill slots' },
   };
   const MERCHANT = 'Old Toadley';
 
@@ -835,6 +852,7 @@
   const shopTips = new Set();
   function skillTip(u) {
     const p = S.player, lvl = p.upgrades[u.id] || 0, lines = [u.desc];
+    if (!canLearn(u)) lines.push(`<b>Needs a free ${u.type} skill slot.</b>`);
     if (lvl < u.max && u.info) lines.push(`<b>Next level:</b> ${u.info(p)}`);
     const picked = (p.mods[u.id] || []).map(c => MOD_TREES[u.id][c].name);
     if (picked.length) lines.push(`<b>Modifiers:</b> ${picked.join(', ')}`);
@@ -847,16 +865,24 @@
     const gem = k => `<span style="color:${CRYSTALS[k].color}">◆</span>`;
     const btn = (kind, act, id, disabled, label, title) =>
       `<button class="cbtn" style="--c:${CRYSTALS[kind].color}" data-act="${act}" data-id="${id}" data-kind="${kind}" title="${title}" ${disabled ? 'disabled' : ''}>${label}</button>`;
+    const slotRow = type => {
+      const price = nextSlotPrice(type), kind = SLOT_COST[type].kind, have = p.slots[type];
+      return `<div class="sitem"><div class="srow"><div class="sname static">${type === 'active' ? 'Active' : 'Passive'} skill slots<small>${slotsUsed(type)} of ${have} used${price ? '' : ' · all unlocked'}</small></div><div class="sbtns">
+        ${price ? btn(kind, 'slot', type, c[kind] < price, `Unlock #${have + 1} · ${price}◆`, `Spend ${price} ${kind} crystals: +1 ${type} skill slot`) : ''}
+      </div></div></div>`;
+    };
     const row = u => {
-      const lvl = p.upgrades[u.id] || 0, maxed = lvl >= u.max, lk = u.type === 'active' ? 'blue' : 'green';
+      const lvl = p.upgrades[u.id] || 0, maxed = lvl >= u.max, lk = u.type === 'active' ? 'blue' : 'green', noSlot = !canLearn(u);
       return `<div class="sitem${shopTips.has(u.id) ? ' open' : ''}"><div class="srow"><button type="button" class="sname" data-tip="${u.id}" aria-expanded="${shopTips.has(u.id)}">${u.name} <span class="ihint" aria-hidden="true">ⓘ</span><small>${lvl === 0 ? 'Not learned' : `Lv ${lvl} / ${u.max}`}${maxed ? ' · MAX' : ''}</small></button><div class="sbtns">
-        ${btn(lk, 'up', u.id, maxed || c[lk] < lvl + 1, maxed ? '+1' : `+1 · ${lvl + 1}◆`, `Spend ${lvl + 1} ${lk} crystals: +1 level`)}
+        ${noSlot ? btn(lk, 'up', u.id, true, 'No slot', `All your ${u.type} skill slots are full. Unlock another slot above.`)
+          : btn(lk, 'up', u.id, maxed || c[lk] < lvl + 1, maxed ? '+1' : `+1 · ${lvl + 1}◆`, `Spend ${lvl + 1} ${lk} crystals: +1 level`)}
       </div></div><div class="stip">${skillTip(u)}</div></div>`;
     };
     document.getElementById('shopBody').innerHTML = `
       <div class="wallet">${Object.keys(CRYSTALS).map(k => `<span>${gem(k)} ${c[k]}</span>`).join('')}</div>
       <div class="legend">${Object.keys(CRYSTALS).map(k => `${gem(k)} ${k[0].toUpperCase() + k.slice(1)}: ${CRYSTALS[k].use}`).join('<br>')}</div>
       <div class="shopmsg">${msg}</div>
+      <div class="ssec">Skill slots</div>${['active', 'passive'].map(slotRow).join('')}
 
       <div class="ssec">Active skills</div>${UPGRADES.filter(u => u.type === 'active').map(row).join('')}
       <div class="ssec">Passive skills</div>${UPGRADES.filter(u => u.type === 'passive').map(row).join('')}`;
@@ -864,6 +890,10 @@
 
   function shopAction(act, id, kind) {
     const p = S.player;
+    if (act === 'slot') { // id is 'active' or 'passive'
+      p.crystals[kind] -= nextSlotPrice(id); p.slots[id]++;
+      return renderShop(`Unlocked ${id} skill slot #${p.slots[id]}!`);
+    }
     const u = UPGRADES.find(x => x.id === id), targets = [u];
     // Blue (active) and green (passive) crystals cost the level being bought: 5 -> 6 costs 6
     p.crystals[kind] -= (p.upgrades[id] || 0) + 1;
@@ -1482,7 +1512,7 @@
       ctx.lineWidth = 8; ctx.strokeStyle = '#111'; ctx.strokeText(t.txt, 0, 0);
       ctx.shadowColor = t.color; ctx.shadowBlur = 24; ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0);
       ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = 'bold 16px system-ui';
-      ctx.fillText('Old Toadley will want to see this…', 0, 34);
+      ctx.fillText(t.txt.includes('PURPLE') ? 'Save it to unlock an extra active skill slot!' : 'Save it to unlock an extra passive skill slot!', 0, 34);
       ctx.restore(); ctx.globalAlpha = 1;
     }
     // HP bar under player
