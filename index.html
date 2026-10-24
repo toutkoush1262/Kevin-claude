@@ -105,7 +105,7 @@
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0;
   function resize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(2, window.devicePixelRatio || 1); // sharper than 2x costs a lot of fill time on phones for little visible gain
     W = window.innerWidth; H = window.innerHeight;
     canvas.width = W * dpr; canvas.height = H * dpr;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -426,12 +426,35 @@
 
 
 
+  // ---------- Performance helpers ----------
+  // Projectile budget: past this many projectiles, new volleys fire fewer, stronger shots (same total damage)
+  const BULLET_BUDGET = 300, MAX_TEXTS = 40, MAX_PARTICLES = 250;
+  const budgetCount = n => (S.bullets.length > BULLET_BUDGET ? Math.max(4, Math.round(n * BULLET_BUDGET / S.bullets.length)) : n);
+  // Spatial grid of enemies, rebuilt each frame, so projectiles only check enemies near them
+  const GRID = 96;
+  let grid = new Map();
+  function buildGrid() {
+    grid = new Map();
+    for (const e of S.enemies) {
+      const k = Math.floor(e.x / GRID) * 65536 + Math.floor(e.y / GRID);
+      let cell = grid.get(k); if (!cell) grid.set(k, cell = []); cell.push(e);
+    }
+  }
+  function forNearby(x, y, rad, fn) {
+    const x0 = Math.floor((x - rad) / GRID), x1 = Math.floor((x + rad) / GRID), y0 = Math.floor((y - rad) / GRID), y1 = Math.floor((y + rad) / GRID);
+    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
+      const cell = grid.get(cx * 65536 + cy);
+      if (cell) for (const e of cell) if (fn(e) === false) return;
+    }
+  }
+  const inView = (x, y, m = 40) => { const p = S.player; return Math.abs(x - p.x) < W / 2 + m && Math.abs(y - p.y) < H / 2 + m; };
+
   function damageEnemy(e, dmg, kx = 0, ky = 0) {
     if (S.player.speedBoost > 0) dmg *= 1 + 0.25 * forageStacks('blue', 'rushdamage'); // Rush Strike
     if (e.vuln > 0) dmg *= 1.25;
     if (e.vulnT > 0) dmg *= 1 + 0.1 * e.vulnStacks;
     e.hp -= dmg; e.flash = 0.1; e.kx += kx; e.ky += ky;
-    S.texts.push({ x: e.x, y: e.y - e.r, txt: Math.round(dmg), life: 0.6 });
+    if (S.texts.length < MAX_TEXTS && inView(e.x, e.y)) S.texts.push({ x: e.x, y: e.y - e.r, txt: Math.round(dmg), life: 0.6 });
   }
 
   // Spore tiers: green is the base value; pink (2x) and golden (5x) get more common as the run goes on,
@@ -493,8 +516,8 @@
   const later = (delay, fn) => S.delayed.push({ t: delay, fn });
 
   function fireThornRing(p, offset) {
-    const w = p.w.thorn, n = 6 + w.level * 2;
-    const dmg = (6 + w.level * 3) * p.might * (hasMod(p, 'thorn', 'barrage') ? 0.6 : 1);
+    const w = p.w.thorn, full = 6 + w.level * 2, n = budgetCount(full);
+    const dmg = (6 + w.level * 3) * p.might * (hasMod(p, 'thorn', 'barrage') ? 0.6 : 1) * (full / n);
     const bramble = hasMod(p, 'thorn', 'bramble');
     for (let i = 0; i < n; i++) {
       const a = ((i + offset) / n) * Math.PI * 2;
@@ -529,9 +552,10 @@
         const base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
         const volleys = hasMod(p, 'bolt', 'twin') ? [base, base + Math.PI] : [base];
         const fire = mult => {
-          for (const dirA of volleys) for (let i = 0; i < count; i++) {
-            const a = dirA + (i - (count - 1) / 2) * spread;
-            S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r: r * (mult < 1 ? 0.7 : 1), dmg: dmg * mult, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
+          const shots = budgetCount(count), boost = count / shots;
+          for (const dirA of volleys) for (let i = 0; i < shots; i++) {
+            const a = dirA + (i - (shots - 1) / 2) * spread * (count / shots);
+            S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, r: r * (mult < 1 ? 0.7 : 1), dmg: dmg * mult * boost, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
               burst: hasMod(p, 'bolt', 'burst'), homing: hasMod(p, 'bolt', 'homing'), concussive: hasMod(p, 'bolt', 'concussive'), vulnerable: hasMod(p, 'bolt', 'vulnerable') });
           }
         };
@@ -1107,11 +1131,12 @@
     }
 
     // Bullets
+    buildGrid();
     const spawned = [];
     for (const b of S.bullets) {
       if (b.homing) { // Seeking Spores: steer toward the closest enemy
         let best = null, bd = 250 * 250;
-        for (const e of S.enemies) { const d = dist2(e, b); if (d < bd && !b.hit.has(e)) { bd = d; best = e; } }
+        forNearby(b.x, b.y, 250, e => { const d = dist2(e, b); if (d < bd && !b.hit.has(e)) { bd = d; best = e; } });
         if (best) {
           const sp = Math.hypot(b.vx, b.vy), cur = Math.atan2(b.vy, b.vx), want = Math.atan2(best.y - b.y, best.x - b.x);
           const diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur)), a = cur + Math.max(-5 * dt, Math.min(5 * dt, diff));
@@ -1119,8 +1144,9 @@
         }
       }
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-      for (const e of S.enemies) {
-        if (b.pierce <= 0 || b.hit.has(e)) continue;
+      forNearby(b.x, b.y, b.r + 64, e => {
+        if (b.pierce <= 0) return false;
+        if (b.hit.has(e)) return;
         if (dist2(b, e) < (b.r + e.r) ** 2) {
           let dmg = b.dmg;
           if (b.concussive) { // Concussive Spores: per-enemy stacks, refreshed by every hit (even at the 12-stack cap)
@@ -1131,13 +1157,13 @@
           if (b.vulnerable) { e.vulnStacks = Math.min(3, (e.vulnStacks || 0) + 1); e.vulnT = 3; } // Vulnerable Spores
           if (b.poison) { e.poison = 2; e.poisonDps = b.dmg * 0.4; }
           if (b.burst) {
-            for (const o of S.enemies) if (o !== e && dist2(o, e) < 60 * 60) damageEnemy(o, b.dmg * 0.5);
+            forNearby(e.x, e.y, 60, o => { if (o !== e && dist2(o, e) < 60 * 60) damageEnemy(o, b.dmg * 0.5); });
             for (let i = 0; i < 6; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-150, 150), vy: rand(-150, 150), life: 0.3, color: '#d9a6ff' });
           }
         }
-      }
+      });
       if (b.pierce <= 0) b.life = 0;
-      if (b.life <= 0 && b.splinter) { // Splinters: shatter into 2 smaller thorns
+      if (b.life <= 0 && b.splinter && S.bullets.length + spawned.length < BULLET_BUDGET) { // Splinters: shatter into 2 smaller thorns
         const a = Math.atan2(b.vy, b.vx);
         for (const off of [-0.6, 0.6]) spawned.push({ ...b, vx: Math.cos(a + off) * 260, vy: Math.sin(a + off) * 260, r: 3, dmg: b.dmg * 0.5, life: 0.5, pierce: 1, splinter: false, hit: new Set(), small: true });
       }
@@ -1194,6 +1220,7 @@
     if (S.pendingForage.length) return showForageChoice(S.pendingForage.shift());
 
     // FX
+    if (S.particles.length > MAX_PARTICLES) S.particles.splice(0, S.particles.length - MAX_PARTICLES);
     for (const q of S.particles) { q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
     S.particles = S.particles.filter(q => q.life > 0);
     for (const w of S.shockwaves) { w.r += (w.max / 0.8) * dt; w.life -= dt; }
@@ -1473,12 +1500,13 @@
 
     // Spores (xp gems)
     for (const g of S.gems) {
+      if (!inView(g.x, g.y)) continue;
       const sp = SPORES[g.tier || 'green'], r = sp.r + (g.big ? 1.8 : 0);
       ctx.fillStyle = g.tier === 'green' && g.big ? '#ffb347' : sp.color;
-      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = g.tier === 'gold' ? 14 : 8;
+      ctx.globalAlpha = 0.25; ctx.beginPath(); ctx.arc(g.x, g.y, r * (g.tier === 'gold' ? 2.6 : 2), 0, 7); ctx.fill(); ctx.globalAlpha = 1; // cheap glow
       ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, 7); ctx.fill();
       if (g.tier === 'gold') { // golden spores twinkle
-        ctx.shadowBlur = 0; ctx.fillStyle = '#fff8d0';
+        ctx.fillStyle = '#fff8d0';
         ctx.beginPath(); ctx.arc(g.x - r * 0.3, g.y - r * 0.3, r * 0.35, 0, 7); ctx.fill();
         const tw = 0.5 + 0.5 * Math.sin(S.t * 6 + g.x);
         ctx.strokeStyle = `rgba(255, 240, 180, ${tw})`; ctx.lineWidth = 1;
@@ -1514,7 +1542,7 @@
       }
     }
 
-    for (const e of S.enemies) drawEnemy(e);
+    for (const e of S.enemies) if (inView(e.x, e.y, e.r * 2 + 40)) drawEnemy(e);
 
     // Peace-sign projectiles
     for (const h of S.hazards) {
@@ -1577,18 +1605,19 @@
 
     // Bullets
     for (const b of S.bullets) {
+      if (!inView(b.x, b.y)) continue;
       if (b.kind === 'bolt') {
-        ctx.fillStyle = '#d9a6ff'; ctx.shadowColor = '#b066ff'; ctx.shadowBlur = 12;
-        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(176, 102, 255, 0.35)'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, 7); ctx.fill(); // cheap glow
+        ctx.fillStyle = '#d9a6ff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
       } else {
-        ctx.strokeStyle = '#7bd36b'; ctx.lineWidth = 3; ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#7bd36b'; ctx.lineWidth = 3;
         const a = Math.atan2(b.vy, b.vx);
         ctx.beginPath(); ctx.moveTo(b.x - Math.cos(a) * 8, b.y - Math.sin(a) * 8); ctx.lineTo(b.x + Math.cos(a) * 6, b.y + Math.sin(a) * 6); ctx.stroke();
       }
     }
     ctx.shadowBlur = 0;
 
-    for (const q of S.particles) { ctx.globalAlpha = q.life * 2; ctx.fillStyle = q.color; ctx.fillRect(q.x - 2, q.y - 2, 4, 4); }
+    for (const q of S.particles) { if (!inView(q.x, q.y)) continue; ctx.globalAlpha = q.life * 2; ctx.fillStyle = q.color; ctx.fillRect(q.x - 2, q.y - 2, 4, 4); }
     ctx.globalAlpha = 1;
     ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center';
     for (const t of S.texts) { ctx.globalAlpha = Math.min(1, t.life * 2); ctx.fillStyle = t.color || '#fff'; ctx.fillText(t.txt, t.x, t.y); }
