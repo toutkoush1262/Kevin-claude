@@ -52,6 +52,8 @@
   .cbtn:hover { background: var(--c); filter: brightness(1.15); }
   .cbtn:disabled { opacity: 0.25; cursor: default; filter: none; }
   #shopClose { display: block; margin: 14px auto 0; }
+  .card.forage { border-color: var(--fc); }
+  .card.forage b { color: var(--fc); }
   .card.mod { border-color: #8a5cc2; background: #241d33; }
   .card.mod:hover { border-color: #ffe08a; background: #2e2542; }
 </style>
@@ -67,7 +69,7 @@
   <p><b>Move:</b> WASD / arrow keys, or drag on touch screens.<br>
     Collect glowing spores to level up: <span style="color:#9dff8a">green</span> ×1,
     <span style="color:#ff8ad8">pink</span> ×2, <span style="color:#ffd84a">golden</span> ×5 (rarer ones show up more as the night goes on).<br>
-    Grab magic mushroom kin for boosts:<br>
+    Grab magic mushroom kin for boosts (every 5 of a kind levels up its <b>Forage</b> enhancements):<br>
     <span style="color:#ff6b6b">Red</span> heals · <span style="color:#6bc7ff">Blue</span> speed ·
     <span style="color:#ffd84a">Gold</span> pulls in all spores</p>
   <button id="startBtn">Start</button>
@@ -309,7 +311,9 @@
         },
       },
       enemies: [], bullets: [], tendrils: [], delayed: [], clones: [], crystals: [], merchant: null, shopCycle: 0, cycleDrops: 0, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
-      shroomTimer: 10,
+      shroomTimers: { red: rand(8, 14), blue: rand(16, 24), gold: rand(26, 36) },
+      forage: { red: { count: 0, level: 0, picks: {} }, blue: { count: 0, level: 0, picks: {} }, gold: { count: 0, level: 0, picks: {} } },
+      pendingForage: [],
     };
   }
 
@@ -326,14 +330,97 @@
     });
   }
 
-  function spawnShroom() {
-    const p = S.player;
-    const kinds = ['red', 'blue', 'gold'];
-    const ang = Math.random() * Math.PI * 2, d = rand(150, 400);
-    S.shrooms.push({ kind: kinds[Math.floor(Math.random() * 3)], x: p.x + Math.cos(ang) * d, y: p.y + Math.sin(ang) * d, life: 30 });
+  // ---------- Forage: magic mushrooms level up ----------
+  // Every 5 mushrooms of a type gives that type a Forage level (max 5). Each level offers 3 random enhancements from a
+  // pool (generic ones for any type, plus ones unique to that type); picks can repeat and stack.
+  const SHROOM_TYPES = {
+    red: { name: 'Red mushrooms', color: '#ff4b4b', interval: [36, 54] },
+    blue: { name: 'Blue mushrooms', color: '#4bb8ff', interval: [36, 54] },
+    gold: { name: 'Golden mushrooms', color: '#ffd84a', interval: [40, 60] },
+  };
+  const FORAGE_MAX = 5, FORAGE_EVERY = 5;
+  const FORAGE_POOL = [
+    // generic: offered for every type, affect that type
+    { id: 'bountiful', name: 'Bountiful', desc: t => `${SHROOM_TYPES[t].name} appear 35% more often.` },
+    { id: 'crystalcap', name: 'Crystal Cap', max: 4, desc: t => `${SHROOM_TYPES[t].name} have a +25% chance to give a random blue or green crystal when collected.` },
+    { id: 'longlived', name: 'Long-lived', desc: t => `${SHROOM_TYPES[t].name} last 15 seconds longer before wilting.` },
+    { id: 'sporebloom', name: 'Spore Bloom', desc: t => `${SHROOM_TYPES[t].name} give 10% of a level's XP when collected.` },
+    { id: 'lure', name: 'Lure', desc: t => `${SHROOM_TYPES[t].name} roll toward you from 150 px farther away.` },
+    // red: healing
+    { id: 'hearty', type: 'red', name: 'Hearty Cap', desc: () => 'Each red mushroom you collect permanently gives +5 max HP.' },
+    { id: 'bigbite', type: 'red', name: 'Big Bite', desc: () => 'Red mushrooms heal 50% more.' },
+    { id: 'thickskin', type: 'red', name: 'Thick Skin', max: 3, desc: () => 'After eating a red mushroom, take 20% less damage for 10 seconds.' },
+    // blue: speed
+    { id: 'fleet', type: 'blue', name: 'Fleet Foot', desc: () => 'Each blue mushroom you collect permanently gives +2% movement speed.' },
+    { id: 'longrush', type: 'blue', name: 'Long Rush', desc: () => 'Blue mushroom speed boosts last 4 seconds longer.' },
+    { id: 'rushdamage', type: 'blue', name: 'Rush Strike', desc: () => 'While speed boosted, all your attacks deal 25% more damage.' },
+    // gold: spore pull
+    { id: 'vacuum', type: 'gold', name: 'Spore Vacuum', desc: () => 'Spores pulled in by a golden mushroom give 25% more XP.' },
+    { id: 'goldentouch', type: 'gold', name: 'Golden Touch', desc: () => 'Each golden mushroom you collect permanently gives +2% XP.' },
+    { id: 'gilded', type: 'gold', name: 'Gilded Haze', max: 4, desc: () => 'Spores pulled in by a golden mushroom have a 20% chance to upgrade a color (green → pink → golden).' },
+  ];
+  const forageStacks = (t, id) => S.forage[t].picks[id] || 0;
+  const forageFreq = t => (1 + 0.35 * forageStacks(t, 'bountiful')) / (1 + S.t / 300); // ~5x rarer by 20 minutes
+
+  function spawnShroom(kind, x, y) {
+    const p = S.player, ang = Math.random() * Math.PI * 2, d = rand(150, 400);
+    S.shrooms.push({ kind, x: x ?? p.x + Math.cos(ang) * d, y: y ?? p.y + Math.sin(ang) * d, life: 30 + 15 * forageStacks(kind, 'longlived') });
   }
 
+  function collectShroom(m) {
+    const p = S.player, t = m.kind, st = id => forageStacks(t, id), say = (txt, color) => S.texts.push({ x: p.x, y: p.y - 30, txt, life: 1, color });
+    if (t === 'red') {
+      if (st('hearty')) { p.maxHp += 5 * st('hearty'); p.hp += 5 * st('hearty'); }
+      const amt = Math.round(30 * (1 + 0.5 * st('bigbite')));
+      p.hp = Math.min(p.maxHp, p.hp + amt); say(`+${amt} HP`, '#ff8a8a');
+      if (st('thickskin')) p.thickSkin = 10;
+    }
+    if (t === 'blue') {
+      if (st('fleet')) p.speed *= 1 + 0.02 * st('fleet');
+      p.speedBoost = 8 + 4 * st('longrush'); say('Speed!', '#6bc7ff');
+    }
+    if (t === 'gold') {
+      for (const g of S.gems) {
+        g.pull = true; g.vacuum = st('vacuum');
+        if (Math.random() < 0.2 * st('gilded') && g.tier !== 'gold') { const to = g.tier === 'pink' ? 'gold' : 'pink'; g.v *= SPORES[to].mult / SPORES[g.tier || 'green'].mult; g.tier = to; }
+      }
+      S.crystals.forEach(c => c.pull = true);
+      if (st('goldentouch')) p.xpMult += 0.02 * st('goldentouch');
+      say('Spore storm!', '#ffd84a');
+    }
+    if (Math.random() < 0.25 * st('crystalcap')) { const k = Math.random() < 0.5 ? 'blue' : 'green'; p.crystals[k]++; S.texts.push({ x: p.x, y: p.y - 46, txt: `+1 ${k} crystal`, life: 1, color: CRYSTALS[k].color }); }
+    if (st('sporebloom')) p.xp += p.xpNext * 0.1 * st('sporebloom');
+    // Forage progress
+    const f = S.forage[t];
+    f.count++;
+    if (f.level < FORAGE_MAX && f.count >= (f.level + 1) * FORAGE_EVERY) { f.level++; S.pendingForage.push(t); }
+  }
+
+  function showForageChoice(t) {
+    const f = S.forage[t];
+    S.paused = true;
+    document.getElementById('levelTitle').textContent = `Forage: ${SHROOM_TYPES[t].name} reached level ${f.level}! Choose an enhancement`;
+    const pool = FORAGE_POOL.filter(o => (!o.type || o.type === t) && (!o.max || forageStacks(t, o.id) < o.max));
+    const picks = [];
+    while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    const cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    for (const o of picks) {
+      const div = document.createElement('div');
+      const n = forageStacks(t, o.id);
+      div.className = 'card forage';
+      div.style.setProperty('--fc', SHROOM_TYPES[t].color);
+      div.innerHTML = `<b>${o.name}</b><span>${o.desc(t)}</span><small>${o.type ? 'Only for ' + SHROOM_TYPES[t].name.toLowerCase() : 'Any mushroom'}${n ? ` · you have ×${n}` : ''}</small>`;
+      div.onclick = () => { f.picks[o.id] = n + 1; resumeGame(); };
+      cards.appendChild(div);
+    }
+    document.getElementById('levelup').classList.remove('hidden');
+  }
+
+
+
   function damageEnemy(e, dmg, kx = 0, ky = 0) {
+    if (S.player.speedBoost > 0) dmg *= 1 + 0.25 * forageStacks('blue', 'rushdamage'); // Rush Strike
     if (e.vuln > 0) dmg *= 1.25;
     if (e.vulnT > 0) dmg *= 1 + 0.1 * e.vulnStacks;
     e.hp -= dmg; e.flash = 0.1; e.kx += kx; e.ky += ky;
@@ -364,7 +451,7 @@
     const tier = sporeTier();
     // Spores are worth more from tougher enemies, matching how enemy health grows over the run
     S.gems.push({ x: e.x, y: e.y, v: e.xp * SPORES[tier].mult * (e.toughness || 1), big: e.xp >= 5, tier });
-    if (Math.random() < 0.015) S.shrooms.push({ kind: 'red', x: e.x, y: e.y, life: 30 });
+    if (Math.random() < 0.005 * forageFreq('red')) spawnShroom('red', e.x, e.y);
     // Crystals: trolls have a 2% red and 2% purple chance (outside the budget); common blue/green drops follow the budget
     const budget = crystalBudgetMult();
     if (e.type === 'troll') {
@@ -637,6 +724,7 @@
     const p = S.player;
     document.getElementById('levelup').classList.add('hidden');
     S.paused = false;
+    if (S.pendingForage.length) return showForageChoice(S.pendingForage.shift());
     if (p.xp >= p.xpNext) levelUp();
   }
 
@@ -859,8 +947,9 @@
     const rate = 0.8 + S.t / 25;
     S.spawnAcc += rate * dt;
     while (S.spawnAcc >= 1 && S.enemies.length < 400) { S.spawnAcc--; spawnEnemy(); }
-    S.shroomTimer -= dt;
-    if (S.shroomTimer <= 0) { S.shroomTimer = rand(12, 20); spawnShroom(); }
+    for (const t in SHROOM_TYPES) {
+      if ((S.shroomTimers[t] -= dt * forageFreq(t)) <= 0) { S.shroomTimers[t] = rand(...SHROOM_TYPES[t].interval); spawnShroom(t); }
+    }
 
     updateWeapons(p, dt);
     updateClones(dt);
@@ -885,7 +974,7 @@
           S.shockwaves.push({ x: p.x, y: p.y, r: 0, max: 40, life: 0.3, color: '#f3c1e8' });
           continue;
         }
-        p.hp -= e.dmg; p.hurt = 0.5;
+        p.hp -= e.dmg * (p.thickSkin > 0 ? 1 - 0.2 * forageStacks('red', 'thickskin') : 1); p.hurt = 0.5;
         if (hasMod(p, 'thorn', 'armor')) damageEnemy(e, (6 + p.w.thorn.level * 3) * p.might * 4, -dx / d * 300, -dy / d * 300);
         S.texts.push({ x: p.x + rand(-12, 12), y: p.y - 24, txt: ['CHOMP!', 'NOM!', 'MUNCH!', 'Yum!'][Math.floor(Math.random() * 4)], life: 0.8, color: '#ffcf6b' });
         for (let i = 0; i < 5; i++) S.particles.push({ x: p.x, y: p.y - 8, vx: rand(-90, 90), vy: rand(-140, -20), life: 0.4, color: '#efe3c8' });
@@ -960,7 +1049,7 @@
         const s = Math.max(250, 600 - d) * dt;
         g.x += (p.x - g.x) / (d || 1) * s; g.y += (p.y - g.y) / (d || 1) * s;
       }
-      if (d < p.r + 6) { g.taken = true; p.xp += g.v * p.xpMult; }
+      if (d < p.r + 6) { g.taken = true; p.xp += g.v * p.xpMult * (1 + 0.25 * (g.vacuum || 0)); }
     }
     S.gems = S.gems.filter(g => !g.taken);
     if (S.gems.length > 600) S.gems.splice(0, S.gems.length - 600);
@@ -987,14 +1076,13 @@
     // Magic mushrooms
     for (const m of S.shrooms) {
       m.life -= dt;
-      if (dist2(m, p) < (p.r + 14) ** 2) {
-        m.life = 0;
-        if (m.kind === 'red') { p.hp = Math.min(p.maxHp, p.hp + 30); S.texts.push({ x: p.x, y: p.y - 30, txt: '+30 HP', life: 1, color: '#ff8a8a' }); }
-        if (m.kind === 'blue') { p.speedBoost = 8; S.texts.push({ x: p.x, y: p.y - 30, txt: 'Speed!', life: 1, color: '#6bc7ff' }); }
-        if (m.kind === 'gold') { S.gems.forEach(g => g.pull = true); S.crystals.forEach(c => c.pull = true); S.texts.push({ x: p.x, y: p.y - 30, txt: 'Spore storm!', life: 1, color: '#ffd84a' }); }
-      }
+      const lure = forageStacks(m.kind, 'lure');
+      if (lure) { const d = Math.sqrt(dist2(m, p)); if (d < 150 * lure && d > 1) { m.x += (p.x - m.x) / d * 220 * dt; m.y += (p.y - m.y) / d * 220 * dt; } }
+      if (dist2(m, p) < (p.r + 14) ** 2) { m.life = 0; collectShroom(m); }
     }
     S.shrooms = S.shrooms.filter(m => m.life > 0);
+    if (p.thickSkin > 0) p.thickSkin -= dt;
+    if (S.pendingForage.length) return showForageChoice(S.pendingForage.shift());
 
     // FX
     for (const q of S.particles) { q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
@@ -1382,6 +1470,16 @@
       ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui';
       ctx.fillText(p.crystals[k], cx, 56); cx -= ctx.measureText(String(p.crystals[k])).width + 12;
       drawCrystal(cx + 4, 51, 5, CRYSTALS[k].color); cx -= 12;
+    }
+    // Forage progress per mushroom type: level and pickups toward the next level
+    let fy = 76;
+    for (const t of ['red', 'blue', 'gold']) {
+      const f = S.forage[t];
+      if (!f.count) continue;
+      const txt = f.level >= FORAGE_MAX ? `Lv ${f.level} MAX` : `Lv ${f.level} · ${f.count - f.level * FORAGE_EVERY}/${FORAGE_EVERY}`;
+      ctx.textAlign = 'right'; ctx.font = 'bold 12px system-ui'; ctx.fillStyle = '#eee'; ctx.fillText(txt, W - 14, fy);
+      drawMushroom(W - 24 - ctx.measureText(txt).width, fy + 2, 11, SHROOM_TYPES[t].color);
+      fy += 18;
     }
     if (S.banner) {
       ctx.globalAlpha = Math.min(1, S.banner.life); ctx.textAlign = 'center'; ctx.font = 'bold 15px system-ui';
