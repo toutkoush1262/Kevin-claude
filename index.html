@@ -623,6 +623,9 @@
   function levelUp() {
     const p = S.player;
     p.level++; p.xp -= p.xpNext; p.xpNext = Math.floor(p.xpNext * 1.3 + 4);
+    // Every level-up heals 5% of max HP
+    const healed = Math.min(p.maxHp - p.hp, p.maxHp * 0.05);
+    if (healed > 0) { p.hp += healed; S.texts.push({ x: p.x, y: p.y - 40, txt: `+${Math.round(healed)} HP`, life: 1, color: '#7be36b' }); }
     if (p.level % 10 === 0) spawnMerchant();
     S.paused = true;
     document.getElementById('levelTitle').textContent = 'Level up! Choose a blessing';
