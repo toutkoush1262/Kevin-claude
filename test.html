@@ -86,7 +86,7 @@
     <span style="color:#ff6b6b">Red</span> heals · <span style="color:#6bc7ff">Blue</span> speed ·
     <span style="color:#ffd84a">Gold</span> pulls in all spores</p>
   <button id="startBtn">Start</button>
-  <p class="version">TEST REALM · v0.0.4-test · Auntie Amanita &amp; augments</p>
+  <p class="version">TEST REALM · v0.0.4-test · Auntie Amanita, augments &amp; Shroomerang</p>
 </div>
 
 <div id="levelup" class="overlay hidden">
@@ -273,7 +273,7 @@
        { id: 'armor', name: 'Thorn Armor', desc: 'Anything that bites you takes heavy thorn damage.' }],
     ],
   };
-  const SKILL_NAMES = { clone: 'Propagate', bolt: 'Spore Shot', orbit: 'Mushroom Buddies', aura: 'Puffball Cloud', tendril: 'Mycelium Tendrils', thorn: 'Thorn Nova' };
+  const SKILL_NAMES = { boomer: 'Shroomerang', clone: 'Propagate', bolt: 'Spore Shot', orbit: 'Mushroom Buddies', aura: 'Puffball Cloud', tendril: 'Mycelium Tendrils', thorn: 'Thorn Nova' };
   // Branching modifier trees: a/b at level 5, then one letter per later pick, so the options at level 10 depend on the
   // level 5 pick (A -> C/D at 'aa'/'ab', B -> E/F at 'ba'/'bb') and the options at level 15 depend on the level 10 pick.
   // Branches default to the skill's MODIFIERS pairs; a skill overrides individual branches with its own options.
@@ -285,6 +285,22 @@
     bba: { id: 'vulnerable', name: 'Vulnerable Spores', desc: 'Enemies hit by Spore Shot take 10% increased damage for 3 seconds, stacking up to three times.' },
     bbb: { id: 'twinshot', name: 'Twin Shot', desc: 'Fires a secondary projectile immediately after the first that deals half damage.' },
   });
+  MOD_TREES.boomer = {
+    a: { id: 'heavycap', name: 'Heavy Cap', desc: 'Throw a single, bigger Shroomerang that deals 2.5× damage.' },
+    b: { id: 'flurry', name: 'Flurry', desc: '+2 Shroomerangs per throw, but each deals 30% less damage.' },
+    aa: { id: 'longthrow', name: 'Long Throw', desc: 'Shroomerangs fly 50% farther before turning back.' },
+    ab: { id: 'apexburst', name: 'Apex Burst', desc: 'Where a Shroomerang turns around, it bursts for 50% damage to nearby enemies.' },
+    ba: { id: 'bigcaps', name: 'Big Caps', desc: 'Shroomerangs are 60% bigger, hitting more enemies per pass.' },
+    bb: { id: 'quickcatch', name: 'Quick Catch', desc: 'Throw 40% more often.' },
+    aaa: { id: 'spinblades', name: 'Spinning Blades', desc: 'Shroomerangs keep hitting enemies they pass through, every 0.25 seconds.' },
+    aab: { id: 'stuncap', name: 'Stun Cap', desc: 'Enemies hit are stopped in their tracks for 0.5 seconds.' },
+    aba: { id: 'splitreturn', name: 'Split Return', desc: 'At the turnaround each Shroomerang splits into 2 that curve back on different paths (60% damage each).' },
+    abb: { id: 'echothrow', name: 'Echo Throw', desc: 'A second throw follows 0.3 seconds after each throw.' },
+    baa: { id: 'poisoncap', name: 'Poison Cap', desc: 'Hits poison enemies for 2 seconds of extra damage.' },
+    bab: { id: 'echothrow', name: 'Echo Throw', desc: 'A second throw follows 0.3 seconds after each throw.' },
+    bba: { id: 'stuncap', name: 'Stun Cap', desc: 'Enemies hit are stopped in their tracks for 0.5 seconds.' },
+    bbb: { id: 'splitreturn', name: 'Split Return', desc: 'At the turnaround each Shroomerang splits into 2 that curve back on different paths (60% damage each).' },
+  };
   MOD_TREES.clone = {
     a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 5 seconds, dealing damage equal to half your max HP in a large area. Respawns every 10 seconds.' },
     aa: { id: 'extratrauma', name: 'Extra Traumatic', desc: 'Clones explode after 2 seconds and respawn twice as fast.' },
@@ -316,6 +332,9 @@
     { id: 'tendril', name: 'Mycelium Tendrils', desc: 'A root tendril lashes an enemy, then branches off to strike two more.', max: SKILL_MAX,
       info: p => { const c = tendrilCfg(p, (p.upgrades.tendril || 0) + 1); return c.depth === 0 ? `single target · 3× damage` : `${c.branches} branches · ${c.depth} split${c.depth > 1 ? 's' : ''} · up to ${c.maxHits} hits`; },
       type: 'active', apply: p => { p.w.tendril.level++; } },
+    { id: 'boomer', name: 'Shroomerang', desc: 'Throws a spinning mushroom cap that flies out, turns around and comes back, hitting everything on both trips.', max: SKILL_MAX,
+      info: p => { const l = (p.upgrades.boomer || 0) + 1, n = 1 + Math.floor(l / 4); return `${n} cap${n > 1 ? 's' : ''} per throw · reach ${Math.round(boomerReach(l))}`; },
+      type: 'active', apply: p => { p.w.boomer.level++; } },
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
       type: 'active', apply: p => { p.w.thorn.level++; } },
     { id: 'clone', name: 'Propagate', desc: 'Grows a clone of you that follows you around and uses your skills at reduced strength.', max: SKILL_MAX,
@@ -354,9 +373,10 @@
           thorn: { level: 0, cd: 0 },
           tendril: { level: 0, cd: 0 },
           clone: { level: 0 },
+          boomer: { level: 0, cd: 0.5 },
         },
       },
-      enemies: [], bullets: [], tendrils: [], delayed: [], clones: [], hazards: [], auntie: null, boss: null, bossDefeated: false, eliteAt: ELITE_FROM + rand(0, 15), crystals: [], merchant: null, shopCycle: 0, cycleDrops: 0, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
+      enemies: [], bullets: [], rangs: [], tendrils: [], delayed: [], clones: [], hazards: [], auntie: null, boss: null, bossDefeated: false, eliteAt: ELITE_FROM + rand(0, 15), crystals: [], merchant: null, shopCycle: 0, cycleDrops: 0, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
       shroomTimers: { red: rand(8, 14), blue: rand(16, 24), gold: rand(26, 36) },
       forage: { red: { count: 0, level: 0, picks: {} }, blue: { count: 0, level: 0, picks: {} }, gold: { count: 0, level: 0, picks: {} } },
       pendingForage: [],
@@ -585,6 +605,72 @@
   const heal = n => { const p = S.player; p.hp = Math.min(p.maxHp, p.hp + n); };
 
   // Runs every active skill for a caster: the player, or a clone (which has its own position, cooldowns and modifiers)
+  const boomerReach = lvl => 220 + lvl * 8;
+  function throwShroomerangs(p) {
+    const w = p.w.boomer, lvl = w.level;
+    let count = 1 + Math.floor(lvl / 4), dmg = (14 + lvl * 5) * p.might, r = 11 + lvl * 0.3, spread = 0.35;
+    if (hasMod(p, 'boomer', 'heavycap')) { count = 1; dmg *= 2.5; r *= 1.4; }
+    if (hasMod(p, 'boomer', 'flurry')) { count += 2; dmg *= 0.7; spread = 0.4; }
+    if (hasMod(p, 'boomer', 'bigcaps')) r *= 1.6;
+    if (aug('boomer', 'twinthrow')) count += 1;
+    if (aug('boomer', 'hardcap')) dmg *= 1.4;
+    const far = aug('boomer', 'farflight') ? 1.3 : 1;
+    const reach = boomerReach(lvl) * (hasMod(p, 'boomer', 'longthrow') ? 1.5 : 1) * far;
+    const target = nearestEnemy(500, p), base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
+    for (let i = 0; i < count; i++) {
+      const a = base + (i - (count - 1) / 2) * spread, speed = 380 * far;
+      S.rangs.push({ owner: p, x: p.x, y: p.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, speed, out: true, travelled: 0, reach, dmg, r,
+        spin: Math.random() * 6, life: 5, hit: new Set(), hitCd: new Map(),
+        blades: hasMod(p, 'boomer', 'spinblades'), stun: hasMod(p, 'boomer', 'stuncap'), poison: hasMod(p, 'boomer', 'poisoncap'),
+        burst: hasMod(p, 'boomer', 'apexburst'), split: hasMod(p, 'boomer', 'splitreturn') });
+    }
+  }
+
+  // Moves Shroomerangs and applies their hits; call after buildGrid()
+  function updateRangs(dt) {
+    const born = [];
+    for (const g of S.rangs) {
+      g.life -= dt; g.spin += dt * 18;
+      if (g.out) {
+        // slow down toward the far end like a real boomerang
+        const k = Math.max(0.3, 1 - 0.7 * (g.travelled / g.reach) ** 2), dir = Math.atan2(g.vy, g.vx);
+        g.vx = Math.cos(dir) * g.speed * k; g.vy = Math.sin(dir) * g.speed * k;
+        g.x += g.vx * dt; g.y += g.vy * dt; g.travelled += g.speed * k * dt;
+        if (g.travelled >= g.reach) { // turnaround: head straight back so the return retraces the throw
+          g.out = false; g.hit = new Set();
+          const back = Math.atan2(g.owner.y - g.y, g.owner.x - g.x);
+          g.vx = Math.cos(back) * g.speed * 0.3; g.vy = Math.sin(back) * g.speed * 0.3;
+          if (g.burst) {
+            forNearby(g.x, g.y, 80, e => { if (dist2(e, g) < 80 * 80) damageEnemy(e, g.dmg * 0.5); });
+            S.shockwaves.push({ x: g.x, y: g.y, r: 0, max: 80, life: 0.35, color: '#e0a060' });
+          }
+          if (g.split) {
+            for (const off of [-0.7, 0.7]) {
+              const a = Math.atan2(g.owner.y - g.y, g.owner.x - g.x) + off;
+              born.push({ ...g, vx: Math.cos(a) * g.speed, vy: Math.sin(a) * g.speed, dmg: g.dmg * 0.6, r: g.r * 0.75, hit: new Set(), hitCd: new Map(), split: false, burst: false });
+            }
+            g.life = 0; continue;
+          }
+        }
+      } else { // curve back toward the thrower and speed up a little
+        const dx = g.owner.x - g.x, dy = g.owner.y - g.y, d = Math.hypot(dx, dy) || 1;
+        const cur = Math.atan2(g.vy, g.vx), want = Math.atan2(dy, dx), diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur));
+        const a = cur + Math.max(-10 * dt, Math.min(10 * dt, diff)), sp = Math.min(g.speed * 1.6, Math.hypot(g.vx, g.vy) + 600 * dt);
+        g.vx = Math.cos(a) * sp; g.vy = Math.sin(a) * sp; g.x += g.vx * dt; g.y += g.vy * dt;
+        if (d < 22) g.life = 0; // caught
+      }
+      forNearby(g.x, g.y, g.r + 64, e => {
+        if (dist2(e, g) >= (g.r + e.r) ** 2) return;
+        if (g.blades) { const cd = g.hitCd.get(e) || 0; if (S.t < cd) return; g.hitCd.set(e, S.t + 0.25); }
+        else { if (g.hit.has(e)) return; g.hit.add(e); }
+        damageEnemy(e, g.dmg, g.vx * 0.15, g.vy * 0.15);
+        if (g.stun) e.rooted = Math.max(e.rooted || 0, 0.5);
+        if (g.poison) { e.poison = 2; e.poisonDps = g.dmg * 0.4; }
+      });
+    }
+    S.rangs = S.rangs.filter(g => g.life > 0).concat(born);
+  }
+
   function updateWeapons(p, dt) {
     const w = p.w;
 
@@ -621,6 +707,16 @@
         w.thorn.cd = w.thorn.cdMax = Math.max(0.8, 3 - w.thorn.level * 0.15) * (hasMod(p, 'thorn', 'barrage') ? 0.5 : 1) * (aug('thorn', 'quickbloom') ? 0.7 : 1);
         fireThornRing(p, 0);
         if (hasMod(p, 'thorn', 'double')) later(0.3, () => fireThornRing(p, 0.5));
+      }
+    }
+
+    // Shroomerang: throw spinning caps at the nearest enemy; they fly out, turn around and curve back to the thrower
+    if (w.boomer && w.boomer.level > 0) {
+      w.boomer.cd -= dt;
+      if (w.boomer.cd <= 0) {
+        w.boomer.cd = w.boomer.cdMax = Math.max(0.6, 1.6 - w.boomer.level * 0.07) * (hasMod(p, 'boomer', 'quickcatch') ? 0.6 : 1);
+        throwShroomerangs(p);
+        if (hasMod(p, 'boomer', 'echothrow')) later(0.3, () => throwShroomerangs(p));
       }
     }
 
@@ -700,7 +796,7 @@
   }
 
   // ---------- Propagate: clones ----------
-  const ACTIVE = ['bolt', 'orbit', 'aura', 'thorn', 'tendril'];
+  const ACTIVE = ['bolt', 'orbit', 'aura', 'thorn', 'tendril', 'boomer'];
   const cloneEff = lvl => 0.5 + 0.02 * Math.max(0, lvl - 1); // 50% at level 1, +2% per level
   // A random modifier path for each skill, as deep as the player's own path (Fun Guys)
   function randomMods(p) {
@@ -711,7 +807,7 @@
   function newClone(i) {
     const p = S.player;
     return { i, x: p.x - p.face * 30 * (i + 1), y: p.y + 10, face: p.face, dead: false, respawn: 0, fuse: 0, target: null, funSig: '',
-      w: { bolt: { level: 0, cd: Math.random() }, orbit: { level: 0, angle: i * 1.3, hitCd: new Map() }, aura: { level: 0, tick: 0.25 }, thorn: { level: 0, cd: 1 + i * 0.4 }, tendril: { level: 0, cd: 0.5 + i * 0.3 } },
+      w: { bolt: { level: 0, cd: Math.random() }, orbit: { level: 0, angle: i * 1.3, hitCd: new Map() }, aura: { level: 0, tick: 0.25 }, thorn: { level: 0, cd: 1 + i * 0.4 }, tendril: { level: 0, cd: 0.5 + i * 0.3 }, boomer: { level: 0, cd: 0.8 + i * 0.35 } },
       mods: p.mods, might: p.might };
   }
   function spawnClone(c) {
@@ -781,7 +877,7 @@
   // You can hold 4 active and 4 passive skills; more slots are bought in the shop with rare crystals
   // (purple for active slots, red for passive slots). Prices rise with each slot bought.
   const SLOT_START = { active: 4, passive: 4 };
-  const SLOT_COST = { active: { kind: 'purple', prices: [2, 3] }, passive: { kind: 'red', prices: [2, 3, 4] } };
+  const SLOT_COST = { active: { kind: 'purple', prices: [2, 3, 4] }, passive: { kind: 'red', prices: [2, 3, 4] } };
   const slotsUsed = type => UPGRADES.filter(u => u.type === type && (S.player.upgrades[u.id] || 0) > 0).length;
   const slotsMax = type => SLOT_START[type] + SLOT_COST[type].prices.length;
   const nextSlotPrice = type => SLOT_COST[type].prices[S.player.slots[type] - SLOT_START[type]]; // undefined once all are bought
@@ -1246,6 +1342,9 @@
     thorn: [{ id: 'sharp', name: 'Sharper Thorns', desc: '+40% Thorn Nova damage.' },
       { id: 'storm', name: 'Thorn Storm', desc: '+12 thorns per burst.' },
       { id: 'quickbloom', name: 'Quick Bloom', desc: 'Bursts 30% more often.' }],
+    boomer: [{ id: 'hardcap', name: 'Hard Cap', desc: '+40% Shroomerang damage.' },
+      { id: 'twinthrow', name: 'Twin Throw', desc: '+1 Shroomerang per throw.' },
+      { id: 'farflight', name: 'Far Flight', desc: 'Shroomerangs fly 30% farther and faster.' }],
     clone: [{ id: 'strongspawn', name: 'Strong Spawn', desc: 'Clones are 25% stronger, and clone explosions deal 40% more.' },
       { id: 'kin', name: 'Kinship', desc: '+1 attacking clone. With Transplant Trauma, explosions cover 50% more area instead.' },
       { id: 'haste', name: 'Hasty Spores', desc: 'Clones act 25% faster; exploding clones go off and regrow 25% sooner.' }],
@@ -1463,6 +1562,7 @@
       }
     }
     S.bullets = S.bullets.filter(b => b.life > 0).concat(spawned);
+    updateRangs(dt);
     for (const d of S.delayed) { d.t -= dt; if (d.t <= 0) d.fn(); }
     S.delayed = S.delayed.filter(d => d.t > 0);
 
@@ -1937,6 +2037,15 @@
       for (const b of orbitPositions(c)) drawMushroom(b.x, b.y + size * 0.45, size, '#c25bff', '#f3d4ff');
     }
 
+    // Shroomerangs: spinning orange-brown caps with a faint motion trail
+    for (const g of S.rangs) {
+      if (!inView(g.x, g.y)) continue;
+      ctx.fillStyle = 'rgba(224, 160, 96, 0.22)'; ctx.beginPath(); ctx.arc(g.x - g.vx * 0.03, g.y - g.vy * 0.03, g.r * 1.1, 0, 7); ctx.fill();
+      ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(g.spin);
+      drawMushroom(0, g.r * 0.55, g.r * 1.6, '#d9822b', '#fff3dc');
+      ctx.restore();
+    }
+
     // Bullets
     for (const b of S.bullets) {
       if (!inView(b.x, b.y)) continue;
@@ -2004,6 +2113,7 @@
       case 'aura': ctx.fillStyle = 'rgba(170,220,90,0.45)'; ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0, 7); ctx.fill(); for (let i = 0; i < 6; i++) { const a = i * 1.05; dot(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.13, '#d8f5a0'); } break;
       case 'thorn': ctx.strokeStyle = '#7bd36b'; ctx.lineWidth = 2; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.35, Math.sin(a) * r * 0.35); ctx.lineTo(Math.cos(a) * r * 1.05, Math.sin(a) * r * 1.05); ctx.stroke(); } dot(0, 0, r * 0.25, '#4f8f45'); break;
       case 'tendril': ctx.strokeStyle = '#efe6d0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r, r); ctx.quadraticCurveTo(-r * 0.2, r * 0.2, 0, 0); ctx.quadraticCurveTo(r * 0.4, -r * 0.2, r, -r * 0.6); ctx.moveTo(0, 0); ctx.quadraticCurveTo(r * 0.3, r * 0.5, r * 0.9, r * 0.6); ctx.stroke(); dot(r, -r * 0.6, 2.2, '#f6f0dc'); dot(r * 0.9, r * 0.6, 2.2, '#f6f0dc'); break;
+      case 'boomer': ctx.save(); ctx.rotate(-0.6); drawMushroom(0, r * 0.6, r * 1.7, '#d9822b', '#fff3dc'); ctx.restore(); ctx.strokeStyle = 'rgba(224,160,96,0.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0.4, 2.4); ctx.stroke(); break;
       case 'clone': ctx.globalAlpha = 0.55; drawMushroom(r * 0.45, r * 0.75, r * 1.3, '#d968c4'); ctx.globalAlpha = 1; drawMushroom(-r * 0.35, r * 0.85, r * 1.4, '#e8423b'); break;
       case 'hp': ctx.fillStyle = '#ff6b6b'; ctx.beginPath(); ctx.moveTo(0, r * 0.9); ctx.bezierCurveTo(-r * 1.4, -r * 0.1, -r * 0.6, -r * 1.1, 0, -r * 0.35); ctx.bezierCurveTo(r * 0.6, -r * 1.1, r * 1.4, -r * 0.1, 0, r * 0.9); ctx.fill(); break;
       case 'speed': ctx.strokeStyle = '#6bc7ff'; ctx.lineWidth = 2.2; for (const dy of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.moveTo(-r, dy * r); ctx.lineTo(r * (0.3 - Math.abs(dy) * 0.5), dy * r); ctx.stroke(); } ctx.beginPath(); ctx.moveTo(r * 0.3, -r * 0.6); ctx.lineTo(r, 0); ctx.lineTo(r * 0.3, r * 0.6); ctx.stroke(); break;

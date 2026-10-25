@@ -29,3 +29,5 @@ Each version is a git tag (`v0.0.1`, `v0.0.2`, `v0.0.3`); check one out to play 
 `test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility).
 
 Currently testing **v0.0.4-test — Auntie Amanita & augments**: once any skill reaches level 15, Auntie Amanita appears near Old Toadley every time he does (with an arrow when she's off screen). She sells three augments for each maxed skill, in any order, for 20, 40, then 60 crystals: blue for active skills, green for passives.
+
+Also testing **Shroomerang**, a new active skill: it throws spinning mushroom caps that slow near the far end, turn around and fly back to you, hitting enemies on both trips. Up to 4 caps per throw at level 15, with its own modifier tree and augments. The test realm also allows a 7th active slot (4 purple), since there are now 7 active skills.
