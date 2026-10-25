@@ -1108,7 +1108,11 @@
   // 10:00, ~240k by 13:00) so that kind of run reaches about level 55 at 10:00 and level 100 at 20:00, the top end.
   const XP_SCALE = 0.227, XP_POWER = 3.24;
   const XP_GAIN = 0.85; // all spores give 15% less XP than their base value
-  const xpToNext = L => (L <= 5 ? [5, 10, 17, 26, 37][L - 1] : Math.round(XP_SCALE * ((L + 1) ** XP_POWER - L ** XP_POWER)));
+  // Early levels get a discount (45% of the cost at level 6, rising to full cost by level 35) so runs don't fall
+  // behind when enemies start crowding in around 2-3 minutes.
+  const XP_EARLY = 0.45, XP_EARLY_UNTIL = 35;
+  const xpToNext = L => (L <= 5 ? [5, 10, 17, 26, 37][L - 1]
+    : Math.round(XP_SCALE * ((L + 1) ** XP_POWER - L ** XP_POWER) * (XP_EARLY + (1 - XP_EARLY) * Math.min(1, (L - 5) / (XP_EARLY_UNTIL - 5)))));
   const menuOpen = () => ['levelup', 'shop', 'augshop', 'testPanel'].some(id => !document.getElementById(id).classList.contains('hidden'));
 
   // Adds one level to a skill; returns the modifier tier it just unlocked, or -1
