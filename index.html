@@ -418,7 +418,7 @@
       div.className = 'card forage';
       div.style.setProperty('--fc', SHROOM_TYPES[t].color);
       div.innerHTML = `<b>${o.name}</b><span>${o.desc(t)}</span><small>${o.type ? 'Only for ' + SHROOM_TYPES[t].name.toLowerCase() : 'Any mushroom'}${n ? ` · you have ×${n}` : ''}</small>`;
-      div.onclick = () => { f.picks[o.id] = n + 1; resumeGame(); };
+      div.onclick = () => { f.picks[o.id] = n + 1; logEvent('forage', { color: t, name: o.name, forageLevel: f.level }); resumeGame(); };
       cards.appendChild(div);
     }
     document.getElementById('levelup').classList.remove('hidden');
@@ -737,10 +737,50 @@
   const canLearn = u => (S.player.upgrades[u.id] || 0) > 0 || slotsUsed(u.type) < S.player.slots[u.type];
   const slotSummary = () => `Skill slots: active ${slotsUsed('active')}/${S.player.slots.active} · passive ${slotsUsed('passive')}/${S.player.slots.passive}`;
 
+  // ---------- Run log ----------
+  // Each run is saved to this page's storage (collection "runs") so Claude can read how real runs go: level and kills
+  // each minute, every pick, crystals, shop visits, elites, the boss, damage taken by source and what ended the run.
+  // Saved once a minute, when the tab is hidden, and at the end. Does nothing when the page has no storage (e.g. a local file).
+  const GAME_VERSION = 'v0.0.3';
+  const RUNLOG = { db: null, saving: false, again: false };
+  (async () => { try { RUNLOG.db = (await window.claude?.use?.('db')) || null; } catch { RUNLOG.db = null; } })();
+
+  function startRunLog() {
+    S.log = {
+      id: 'run-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e4).toString(36),
+      version: GAME_VERSION, startedAt: new Date().toISOString(), screen: { w: W, h: H, touch: matchMedia('(pointer: coarse)').matches },
+      status: 'playing', perMinute: [], levelTimes: [], events: [], damageBy: {}, crystalsGot: { blue: 0, green: 0, red: 0, purple: 0 },
+    };
+    S.logNextMinute = 60;
+  }
+  function logEvent(type, data = {}) {
+    if (!S.log || S.log.events.length >= 1500) return;
+    S.log.events.push({ t: Math.round(S.t), type, ...data });
+  }
+  function logSnapshot() {
+    const p = S.player;
+    return { min: Math.round(S.t / 60), level: p.level, kills: S.kills, hp: Math.round(p.hp), maxHp: Math.round(p.maxHp), enemies: S.enemies.length,
+      crystals: { ...p.crystals }, skills: Object.fromEntries(UPGRADES.filter(u => p.upgrades[u.id]).map(u => [u.id, p.upgrades[u.id]])) };
+  }
+  async function saveRunLog() {
+    if (!RUNLOG.db || !S.log) return;
+    if (RUNLOG.saving) { RUNLOG.again = true; return; } // one write at a time; save again right after if more happened
+    RUNLOG.saving = true;
+    const p = S.player;
+    const doc = { ...S.log, updatedAt: new Date().toISOString(), timeSec: Math.round(S.t), final: logSnapshot(),
+      mods: Object.fromEntries(Object.entries(p.mods).map(([k, codes]) => [k, codes.map(c => MOD_TREES[k][c].name)])),
+      forage: Object.fromEntries(Object.entries(S.forage).map(([t, f]) => [t, { collected: f.count, level: f.level, picks: f.picks }])),
+      slots: { ...p.slots }, bossDefeated: S.bossDefeated };
+    try { await RUNLOG.db.doc('runs/' + S.log.id).set(doc); } catch { /* storage unavailable or full: skip quietly */ }
+    RUNLOG.saving = false;
+    if (RUNLOG.again) { RUNLOG.again = false; saveRunLog(); }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden && S && S.running) saveRunLog(); });
+
   // ---------- Player damage ----------
   // Every hit on the player goes through here so blocking, Thick Skin and Sacrificial Shrooms apply to bites and boss
   // attacks alike. Returns 'blocked', 'hit' or 'dead'.
-  function hurtPlayer(dmg, words = ['CHOMP!', 'NOM!', 'MUNCH!', 'Yum!']) {
+  function hurtPlayer(dmg, words = ['CHOMP!', 'NOM!', 'MUNCH!', 'Yum!'], source = 'bite') {
     const p = S.player;
     const block = aliveClones() * (hasMod(p, 'clone', 'bulletproof') ? 0.2 : hasMod(p, 'clone', 'shielding') ? 0.1 : 0);
     p.hurt = 0.5;
@@ -749,7 +789,9 @@
       S.shockwaves.push({ x: p.x, y: p.y, r: 0, max: 40, life: 0.3, color: '#f3c1e8' });
       return 'blocked';
     }
-    p.hp -= dmg * (p.thickSkin > 0 ? 1 - 0.2 * forageStacks('red', 'thickskin') : 1);
+    const taken = dmg * (p.thickSkin > 0 ? 1 - 0.2 * forageStacks('red', 'thickskin') : 1);
+    p.hp -= taken;
+    if (S.log) { S.log.damageBy[source] = Math.round((S.log.damageBy[source] || 0) + taken); S.lastHitBy = source; }
     S.texts.push({ x: p.x + rand(-12, 12), y: p.y - 24, txt: words[Math.floor(Math.random() * words.length)], life: 0.8, color: '#ffcf6b' });
     for (let i = 0; i < 5; i++) S.particles.push({ x: p.x, y: p.y - 8, vx: rand(-90, 90), vy: rand(-140, -20), life: 0.4, color: '#efe3c8' });
     if (p.hp <= 0 && hasMod(p, 'clone', 'sacrifice') && aliveClones()) { // Sacrificial Shrooms
@@ -785,6 +827,7 @@
     const boss = { type: 'hippie', big: 'hippie', boss: true, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d, hp: BOSS_HP, maxHp: BOSS_HP, r: 58,
       speed: 70, dmg: 30, xp: 0, toughness: 1, flash: 0, phase: 0, kx: 0, ky: 0, state: 'walk', timer: 3, lastAttack: '' };
     S.enemies.push(boss); S.boss = boss;
+    logEvent('boss-arrives', { level: p.level });
     S.banner = { txt: '☮ A GIANT HIPPIE wanders in, and he has the munchies! ☮', life: 5, color: '#ff9de2' };
     S.flash = { color: '#ff9de2', life: 0.5 };
   }
@@ -796,6 +839,7 @@
       toughness: scale, r: def.r * 1.7, speed: def.speed * 0.9, dmg: cfg.bite, xp: def.xp, flash: 0, phase: Math.random() * 6.28, kx: 0, ky: 0,
       state: 'walk', timer: rand(1.5, 2.5), lastAttack: '' });
     S.banner = { txt: `⚔ An elite ${cfg.name} appears! ⚔`, life: 3.5, color: '#ffd84a' };
+    logEvent('elite-arrives', { elite: cfg.name });
   }
 
   function startAttack(b, kind) {
@@ -833,7 +877,7 @@
           S.shockwaves.push({ x: b.x, y: b.y, r: 0, max: c.r * 1.3, life: 0.5, color: b.boss ? '#ff9de2' : '#ffd84a' }, { x: b.x, y: b.y, r: -20, max: c.r, life: 0.5, color: '#fff' });
           const hit = dist2(p, b.target) < (b.target.r + p.r) ** 2;
           endAttack(b);
-          if (hit && hurtPlayer(c.dmg, cfg.words) === 'dead') return true;
+          if (hit && hurtPlayer(c.dmg, cfg.words, b.big + ' slam') === 'dead') return true;
         }
       }
     } else if (b.state === 'ring') {
@@ -842,7 +886,7 @@
         const off = b.waves * (Math.PI / c.n);
         for (let i = 0; i < c.n; i++) {
           const a = off + (i / c.n) * Math.PI * 2;
-          S.hazards.push({ kind: 'peace', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 10, dmg: c.dmg, life: 6, hue: (i * 26 + b.waves * 40) % 360, words: cfg.words });
+          S.hazards.push({ kind: 'peace', src: b.big + ' ring', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 10, dmg: c.dmg, life: 6, hue: (i * 26 + b.waves * 40) % 360, words: cfg.words });
         }
         b.waves++; b.waveT = c.every;
       }
@@ -852,7 +896,7 @@
       if (b.timer <= 0) {
         for (let i = 0; i < c.n; i++) {
           const a = b.aim + (i - (c.n - 1) / 2) * (c.spread / ((c.n - 1) / 2));
-          S.hazards.push({ kind: 'cleaver', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 9, dmg: c.dmg, life: 4, spin: Math.random() * 6, words: cfg.words });
+          S.hazards.push({ kind: 'cleaver', src: b.big + ' fan', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 9, dmg: c.dmg, life: 4, spin: Math.random() * 6, words: cfg.words });
         }
         endAttack(b);
       }
@@ -862,7 +906,7 @@
         if (!b.dashing) { b.dashing = true; b.dashLeft = b.dashLen; b.dashHit = false; }
         const step = Math.min(b.dashLeft, c.speed * dt);
         b.x += b.dashDir.x * step; b.y += b.dashDir.y * step; b.dashLeft -= step;
-        if (!b.dashHit && dist2(p, b) < (b.r + p.r) ** 2) { b.dashHit = true; if (hurtPlayer(c.dmg, cfg.words) === 'dead') return true; }
+        if (!b.dashHit && dist2(p, b) < (b.r + p.r) ** 2) { b.dashHit = true; if (hurtPlayer(c.dmg, cfg.words, b.big + ' dash') === 'dead') return true; }
         if (b.dashLeft <= 0) {
           b.dashing = false;
           if (c.again && Math.random() < c.again && !b.chained) { b.chained = true; startAttack(b, 'dash'); } // the Tusker sometimes charges twice
@@ -872,7 +916,7 @@
     }
     b.face = dx >= 0 ? 1 : -1;
     // Bite when touching it outside of attacks
-    if (b.state === 'walk' && p.hurt <= 0 && d < b.r + p.r && hurtPlayer(cfg.bite, cfg.words) === 'dead') return true;
+    if (b.state === 'walk' && p.hurt <= 0 && d < b.r + p.r && hurtPlayer(cfg.bite, cfg.words, b.big + ' bite') === 'dead') return true;
     return false;
   }
 
@@ -882,13 +926,14 @@
     for (const h of S.hazards) {
       h.x += h.vx * dt; h.y += h.vy * dt; h.life -= dt;
       if (h.spin != null) h.spin += dt * 14;
-      if (p.hurt <= 0 && dist2(h, p) < (h.r + p.r - 3) ** 2) { h.life = 0; if (hurtPlayer(h.dmg, h.words) === 'dead') return true; }
+      if (p.hurt <= 0 && dist2(h, p) < (h.r + p.r - 3) ** 2) { h.life = 0; if (hurtPlayer(h.dmg, h.words, h.src || 'projectile') === 'dead') return true; }
     }
     S.hazards = S.hazards.filter(h => h.life > 0);
     return false;
   }
 
   function bossDefeated(b) {
+    logEvent('boss-defeated', { fightSec: Math.round(S.t - BOSS_AT), level: S.player.level });
     S.boss = null; S.bossDefeated = true;
     S.banner = { txt: '☮ You out-foraged the Giant Hippie! Peace restored. ☮', life: 6, color: '#ffd84a' };
     S.bigText = { txt: 'BOSS DEFEATED!', life: 2.5, color: '#ffd84a' };
@@ -900,6 +945,7 @@
   }
 
   function eliteDefeated(e) {
+    logEvent('elite-defeated', { elite: BIG[e.big].name });
     S.kills++;
     S.banner = { txt: `⚔ ${BIG[e.big].name} defeated! ⚔`, life: 2.5, color: '#ffd84a' };
     for (let i = 0; i < 12; i++) { const a = Math.random() * 6.28, r = rand(10, 70); S.gems.push({ x: e.x + Math.cos(a) * r, y: e.y + Math.sin(a) * r, v: 2 * e.xp * e.toughness * XP_GAIN, big: true, tier: 'pink' }); }
@@ -937,6 +983,7 @@
   function levelUp() {
     const p = S.player;
     p.level++; p.xp -= p.xpNext; p.xpNext = xpToNext(p.level);
+    if (S.log) S.log.levelTimes.push(Math.round(S.t));
     // Every level-up heals 5% of max HP
     const healed = Math.min(p.maxHp - p.hp, p.maxHp * 0.05);
     if (healed > 0) { p.hp += healed; S.texts.push({ x: p.x, y: p.y - 40, txt: `+${Math.round(healed)} HP`, life: 1, color: '#7be36b' }); }
@@ -958,6 +1005,7 @@
       div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>${modNext ? '<small style="color:#c9a8ff">✦ Unlocks a skill modifier choice</small>' : ''}`;
       div.onclick = () => {
         const t = gainLevel(u);
+        logEvent('pick', { skill: u.id, level: p.upgrades[u.id] });
         if (t >= 0) showModifierChoice(u.id, t, resumeGame); else resumeGame();
       };
       cards.appendChild(div);
@@ -978,6 +1026,7 @@
       div.innerHTML = `<b>${m.name}</b><span>${m.desc}</span><small>Permanent modifier for ${SKILL_NAMES[k]}</small>`;
       div.onclick = () => {
         (p.mods[k] = p.mods[k] || []).push(code);
+        logEvent('modifier', { skill: k, name: m.name, skillLevel: p.w[k].level });
         document.getElementById('levelup').classList.add('hidden');
         onDone();
       };
@@ -1031,6 +1080,7 @@
     if (S.merchant) { S.banner = { txt: `🐸 ${MERCHANT} is still waiting for you. Follow the arrow!`, life: 4 }; return; }
     const p = S.player, a = Math.random() * Math.PI * 2;
     S.merchant = { x: p.x + Math.cos(a) * 280, y: p.y + Math.sin(a) * 280 };
+    logEvent('merchant-arrives', { level: p.level });
     S.banner = { txt: `🐸 ${MERCHANT} the crystal merchant has arrived! Follow the arrow. He'll wait for you.`, life: 5 };
   }
 
@@ -1090,11 +1140,13 @@
   function shopAction(act, id, kind) {
     const p = S.player;
     if (act === 'slot') { // id is 'active' or 'passive'
+      logEvent('shop-buy', { slot: id, cost: nextSlotPrice(id), crystal: kind });
       p.crystals[kind] -= nextSlotPrice(id); p.slots[id]++;
       return renderShop(`Unlocked ${id} skill slot #${p.slots[id]}!`);
     }
     const u = UPGRADES.find(x => x.id === id), targets = [u];
     // Blue (active) and green (passive) crystals cost the level being bought: 5 -> 6 costs 6
+    logEvent('shop-buy', { skill: id, toLevel: (p.upgrades[id] || 0) + 1, cost: (p.upgrades[id] || 0) + 1, crystal: kind });
     p.crystals[kind] -= (p.upgrades[id] || 0) + 1;
     const msg = targets.map(t => `${t.name} → level ${(p.upgrades[t.id] || 0) + 1}`).join(' & ') + '!';
     // Apply each level; any that reaches 5/10/15 opens its modifier choice before returning to the shop
@@ -1144,6 +1196,7 @@
     p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
 
     // Spawning: rate ramps up over time
+    if (S.log && S.t >= S.logNextMinute) { S.log.perMinute.push(logSnapshot()); S.logNextMinute += 60; saveRunLog(); }
     if (S.t >= BOSS_AT && !S.boss && !S.bossDefeated) spawnBoss();
     if (S.t >= S.eliteAt) { // elites: about every 60-90 s from 10:00, more often later; at most 2, none during the boss fight
       if (!S.boss && S.enemies.filter(e => e.elite).length < 2) spawnElite();
@@ -1174,7 +1227,7 @@
       e.kx *= 0.85; e.ky *= 0.85;
       e.flash = Math.max(0, e.flash - dt);
       if (d < e.r + p.r && p.hurt <= 0) {
-        const res = hurtPlayer(e.dmg);
+        const res = hurtPlayer(e.dmg, undefined, e.type);
         if (res === 'dead') return gameOver();
         if (res === 'hit' && hasMod(p, 'thorn', 'armor')) damageEnemy(e, (6 + p.w.thorn.level * 3) * p.might * 4, -dx / d * 300, -dy / d * 300);
       }
@@ -1255,7 +1308,7 @@
       const d = Math.sqrt(dist2(c, p));
       if (c.pull || d < p.magnet) { const s = Math.max(250, 600 - d) * dt; c.x += (p.x - c.x) / (d || 1) * s; c.y += (p.y - c.y) / (d || 1) * s; }
       if (d < p.r + 8) {
-        c.taken = true; p.crystals[c.kind]++;
+        c.taken = true; p.crystals[c.kind]++; if (S.log) S.log.crystalsGot[c.kind]++;
         const col = CRYSTALS[c.kind].color;
         if (c.rare) rareCelebration(c.kind, col);
         else S.texts.push({ x: p.x, y: p.y - 34, txt: `+1 ${c.kind} crystal`, life: 1, color: col });
@@ -1265,6 +1318,7 @@
 
     // Merchant
     if (S.merchant) {
+      if (dist2(S.merchant, p) < (p.r + 24) ** 2) { logEvent('shop-visit', { crystals: { ...p.crystals } }); }
       if (dist2(S.merchant, p) < (p.r + 24) ** 2) return openShop(`"Ribbit! Crystals for power, little mushroom?"`);
     }
     if (S.banner && (S.banner.life -= dt) <= 0) S.banner = null;
@@ -1296,6 +1350,7 @@
 
   function gameOver() {
     S.running = false;
+    if (S.log) { S.log.status = 'died'; S.log.killedBy = S.lastHitBy || 'unknown'; S.log.perMinute.push(logSnapshot()); saveRunLog(); }
     const m = Math.floor(S.t / 60), s = Math.floor(S.t % 60).toString().padStart(2, '0');
     document.getElementById('finalStats').innerHTML = `Survived <b>${m}:${s}</b> · Level <b>${S.player.level}</b> · Defeated <b>${S.kills}</b> creatures`;
     document.getElementById('gameover').classList.remove('hidden');
@@ -1930,7 +1985,8 @@
   }
 
   function start() {
-    newGame(); initUpgradeCounts();
+    if (S && S.log && S.running) { S.log.status = 'restarted'; saveRunLog(); }
+    newGame(); initUpgradeCounts(); startRunLog();
     // Opening wave: a ring of slugs already on screen, close enough to see but out of biting range
     const ring = Math.min(W, H) * 0.32;
     for (let i = 0; i < 8; i++) spawnEnemy('slug', (i / 8) * Math.PI * 2 + rand(-0.2, 0.2), Math.max(130, ring * rand(0.85, 1.15)));
