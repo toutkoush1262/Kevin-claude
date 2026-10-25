@@ -1103,12 +1103,12 @@
   }
 
   // ---------- Level up ----------
-  // XP needed to go from level L to L + 1. Fitted to a real player's logged XP income (v0.0.4-test run: ~100k XP by
-  // 10:00, ~240k by 13:00): total XP to reach level L is XP_SCALE x L^4, which paces that run at about level 5 at 1:00,
-  // 16 at 5:00, 28 at 10:00, 38 at 15:00 and 48 at 20:00.
-  const XP_SCALE = 0.161;
+  // XP needed to go from level L to L + 1. The first five levels keep their hand-set costs; after that the total XP to
+  // reach level L is XP_SCALE x L^XP_POWER, fitted to a strong logged run with every XP buff (v0.0.4-test: ~100k XP by
+  // 10:00, ~240k by 13:00) so that kind of run reaches about level 55 at 10:00 and level 100 at 20:00, the top end.
+  const XP_SCALE = 0.227, XP_POWER = 3.24;
   const XP_GAIN = 0.85; // all spores give 15% less XP than their base value
-  const xpToNext = L => Math.max(5, Math.round(XP_SCALE * ((L + 1) ** 4 - L ** 4)));
+  const xpToNext = L => (L <= 5 ? [5, 10, 17, 26, 37][L - 1] : Math.round(XP_SCALE * ((L + 1) ** XP_POWER - L ** XP_POWER)));
   const menuOpen = () => ['levelup', 'shop', 'augshop', 'testPanel'].some(id => !document.getElementById(id).classList.contains('hidden'));
 
   // Adds one level to a skill; returns the modifier tier it just unlocked, or -1

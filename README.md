@@ -32,4 +32,4 @@ Currently testing **v0.0.4-test — Auntie Amanita & augments**: once any skill 
 
 Also testing **Shroomerang**, a new active skill: it throws spinning mushroom caps that slow near the far end, turn around and fly back to you, hitting enemies on both trips. Up to 4 caps per throw at level 15, with its own modifier tree and augments. The test realm also allows a 7th active slot (4 purple), since there are now 7 active skills.
 
-Also testing a **steeper XP curve fitted to a real logged run**: total XP to reach level L is 0.161 × L⁴, which would have paced that run at about level 28 at 10:00 and 45 at 20:00 (it actually reached 74 at 10:00 on the old curve).
+Also testing a **steeper XP curve fitted to a real logged run**: after the first five levels, total XP to reach level L is 0.227 × L^3.24, so a strong run with every XP buff reaches about level 55 at 10:00 and level 100 (the intended top end) at 20:00. That run actually reached 74 at 10:00 and 97 at 13:00 on the old curve.
