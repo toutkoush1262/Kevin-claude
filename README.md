@@ -23,3 +23,9 @@ A small Vampire Survivors–style game: you are a mushroom, and every hungry cre
 - **v0.0.1** — Everything before Forage: six active skills with branching modifiers at levels 5/10/15, passives, crystals and Old Toadley's shop, pink and golden spores, and the tuned XP curve.
 
 Each version is a git tag (`v0.0.1`, `v0.0.2`, `v0.0.3`); check one out to play that build.
+
+## Test realm
+
+`test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility).
+
+Currently testing **v0.0.4-test — Auntie Amanita & augments**: once any skill reaches level 15, Auntie Amanita appears near Old Toadley every time he does (with an arrow when she's off screen). She sells three augments for each maxed skill, in any order, for 20, 40, then 60 crystals: blue for active skills, green for passives.

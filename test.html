@@ -1,0 +1,2212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Mushroom Survivors Test Realm</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d1410; overflow: hidden; font-family: system-ui, sans-serif; color: #eee; }
+  canvas { display: block; touch-action: none; }
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(8, 12, 10, 0.82); text-align: center; padding: 16px; box-sizing: border-box;
+  }
+  .hidden { display: none; }
+  h1 { margin: 0 0 8px; font-size: clamp(28px, 6vw, 52px); color: #ff6b6b; text-shadow: 0 3px 0 #5a1a1a; }
+  h2 { margin: 0 0 16px; color: #ffe08a; }
+  p { max-width: 520px; line-height: 1.5; color: #cfd8cf; }
+  button {
+    font: inherit; font-size: 18px; padding: 10px 26px; margin-top: 12px; border: 0; border-radius: 8px;
+    background: #ff6b6b; color: #1a0d0d; font-weight: 700; cursor: pointer;
+  }
+  button:hover { background: #ff8a8a; }
+  .cards { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: 720px; }
+  .card {
+    width: 200px; padding: 14px; border-radius: 10px; background: #1d2a22; border: 2px solid #3f5a48;
+    cursor: pointer; text-align: left; box-sizing: border-box;
+  }
+  .card:hover { border-color: #ffe08a; background: #24352a; }
+  .card b { display: block; color: #ffe08a; margin-bottom: 6px; font-size: 17px; }
+  .card span { font-size: 14px; color: #cfd8cf; }
+  .card small { display: block; margin-top: 8px; color: #8fb39a; }
+  .shop { background: #16201a; border: 2px solid #3f5a48; border-radius: 12px; padding: 16px; width: min(560px, 100%); max-height: 92vh; overflow: auto; box-sizing: border-box; text-align: left; }
+  .shop h2 { text-align: center; }
+  .wallet { display: flex; gap: 16px; justify-content: center; font-weight: 700; font-size: 18px; }
+  .legend { font-size: 13px; color: #a9bfae; margin: 10px 0; line-height: 1.6; }
+  .shopmsg { text-align: center; color: #ffe08a; min-height: 1.4em; margin: 6px 0; }
+  .ssec { color: #ffe08a; font-weight: 700; margin: 12px 0 4px; }
+  .sitem { border-top: 1px solid #26362c; }
+  .srow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
+  .sname { all: unset; cursor: pointer; flex: 1; min-width: 0; color: #eee; font-size: 16px; }
+  .shop .sname, .shop .sname:hover { background: transparent; -webkit-tap-highlight-color: transparent; }
+  .sname:hover, .sname:focus-visible { color: #ffe08a; }
+  .sname:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; border-radius: 4px; }
+  .ihint { font-size: 12px; color: #8fb39a; }
+  .sname.static { cursor: default; color: #eee; }
+  .sname small { display: block; color: #8fb39a; font-size: 12px; }
+  .stip { display: none; font-size: 13px; line-height: 1.5; color: #cfd8cf; background: #1d2a22; border: 1px solid #3f5a48; border-radius: 8px; padding: 8px 10px; margin: 0 0 8px; }
+  .stip b { color: #ffe08a; font-weight: 600; }
+  .sitem.open .stip { display: block; }
+  @media (hover: hover) { .sitem:hover .stip { display: block; } }
+  .sbtns { display: flex; gap: 6px; flex-shrink: 0; }
+  .cbtn { font-size: 13px; padding: 6px 10px; margin: 0; background: var(--c); color: #111; border-radius: 6px; }
+  .cbtn:hover { background: var(--c); filter: brightness(1.15); }
+  .cbtn:disabled { opacity: 0.25; cursor: default; filter: none; }
+  .shop.aug { border-color: #8a4fd1; }
+  .augcount { color: #8fb39a; font-weight: 400; font-size: 12px; }
+  .augowned { color: #7be36b; font-size: 13px; font-weight: 700; }
+  #augClose { display: block; margin: 14px auto 0; }
+  #testBtn { position: fixed; left: max(10px, env(safe-area-inset-left, 0px)); bottom: max(10px, env(safe-area-inset-bottom, 0px)); margin: 0; padding: 6px 12px; font-size: 14px; background: #8a4fd1; color: #fff; z-index: 5; }
+  #testBtn:hover { background: #a36ce6; }
+  .testgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .testgrid button { margin: 0; font-size: 14px; padding: 8px 10px; background: #2e2542; color: #eee; border: 1px solid #8a4fd1; }
+  .testgrid button:hover { background: #3c3057; }
+  #testClose { display: block; margin: 14px auto 0; }
+  #shopClose { display: block; margin: 14px auto 0; }
+  .slotinfo { margin: -8px 0 12px; font-size: 13px; color: #8fb39a; min-height: 1.2em; }
+  .version { margin-top: 18px; font-size: 13px; color: #6f8a77; }
+  .card.forage { border-color: var(--fc); }
+  .card.forage b { color: var(--fc); }
+  .card.mod { border-color: #8a5cc2; background: #241d33; }
+  .card.mod:hover { border-color: #ffe08a; background: #2e2542; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="menu" class="overlay">
+  <h1>🍄 Mushroom Survivors 🍄</h1>
+  <p>You are a small, brave mushroom. And everything in the forest thinks you look <i>delicious</i>.
+    Hungry slugs, bats, goblins, truffle boars, pixies and trolls are coming to eat you.
+    Don't get eaten! Your spore attacks fire automatically.</p>
+  <p><b>Move:</b> WASD / arrow keys, or drag on touch screens.<br>
+    Collect glowing spores to level up: <span style="color:#9dff8a">green</span> ×1,
+    <span style="color:#ff8ad8">pink</span> ×2, <span style="color:#ffd84a">golden</span> ×5 (rarer ones show up more as the night goes on).<br>
+    Grab magic mushroom kin for boosts (every 5 of a kind levels up its <b>Forage</b> enhancements):<br>
+    <span style="color:#ff6b6b">Red</span> heals · <span style="color:#6bc7ff">Blue</span> speed ·
+    <span style="color:#ffd84a">Gold</span> pulls in all spores</p>
+  <button id="startBtn">Start</button>
+  <p class="version">TEST REALM · v0.0.4-test · Auntie Amanita &amp; augments</p>
+</div>
+
+<div id="levelup" class="overlay hidden">
+  <h2 id="levelTitle">Level up! Choose a blessing</h2>
+  <p id="slotInfo" class="slotinfo"></p>
+  <div id="cards" class="cards"></div>
+</div>
+
+<div id="shop" class="overlay hidden">
+  <div class="shop">
+    <h2>🐸 Old Toadley's Crystal Shop</h2>
+    <div id="shopBody"></div>
+    <button id="shopClose">Leave shop</button>
+  </div>
+</div>
+
+<div id="augshop" class="overlay hidden">
+  <div class="shop aug">
+    <h2>✨ Auntie Amanita's Augments</h2>
+    <div id="augBody"></div>
+    <button id="augClose">Leave</button>
+  </div>
+</div>
+
+<button id="testBtn" class="hidden" aria-label="Test tools">🧪 Test</button>
+<div id="testPanel" class="overlay hidden">
+  <div class="shop">
+    <h2>🧪 Test tools</h2>
+    <p class="legend">Only in the test realm. The game pauses while this is open.</p>
+    <div class="testgrid">
+      <button data-test="max-bolt">Spore Shot → level 15</button>
+      <button data-test="max-random">Random active skill → 15</button>
+      <button data-test="max-passives">All learned passives → max</button>
+      <button data-test="crystals">+100 blue &amp; green</button>
+      <button data-test="shop">Summon shop (and Auntie)</button>
+      <button data-test="t10">Jump to 10:00 (elites)</button>
+      <button data-test="t1950">Jump to 19:50 (boss)</button>
+      <button data-test="god">Invincible: off</button>
+    </div>
+    <p id="testMsg" class="shopmsg"></p>
+    <button id="testClose">Back to the game</button>
+  </div>
+</div>
+
+<div id="gameover" class="overlay hidden">
+  <h1>You got eaten! 🍽️</h1>
+  <p id="finalStats"></p>
+  <button id="restartBtn">Play again</button>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0;
+  function resize() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1); // sharper than 2x costs a lot of fill time on phones for little visible gain
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Input ----------
+  const keys = {};
+  window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key === 'p' || e.key === 'Escape') togglePause(); });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+  const touch = { active: false, sx: 0, sy: 0, x: 0, y: 0 };
+  canvas.addEventListener('pointerdown', e => { touch.active = true; touch.sx = touch.x = e.clientX; touch.sy = touch.y = e.clientY; });
+  canvas.addEventListener('pointermove', e => { if (touch.active) { touch.x = e.clientX; touch.y = e.clientY; } });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => canvas.addEventListener(t, () => { touch.active = false; }));
+
+  function inputDir() {
+    let dx = 0, dy = 0;
+    if (keys['w'] || keys['arrowup']) dy -= 1;
+    if (keys['s'] || keys['arrowdown']) dy += 1;
+    if (keys['a'] || keys['arrowleft']) dx -= 1;
+    if (keys['d'] || keys['arrowright']) dx += 1;
+    if (touch.active) {
+      const tx = touch.x - touch.sx, ty = touch.y - touch.sy, d = Math.hypot(tx, ty);
+      if (d > 8) { dx = tx / Math.max(d, 50); dy = ty / Math.max(d, 50); }
+    }
+    const len = Math.hypot(dx, dy);
+    return len > 1 ? { x: dx / len, y: dy / len } : { x: dx, y: dy };
+  }
+
+  // ---------- Helpers ----------
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+  function hash(x, y) {
+    let h = (x * 374761393 + y * 668265263) | 0;
+    h = (h ^ (h >>> 13)) * 1274126177 | 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  }
+
+  // ---------- Enemy definitions ----------
+  const ENEMIES = {
+    slug:      { hp: 10, speed: 50, dmg: 6,  r: 13, xp: 1, color: '#c9a23f' },
+    bat:       { hp: 6,  speed: 105, dmg: 5, r: 10, xp: 1, color: '#8a6bd1' },
+    goblin:    { hp: 20, speed: 72, dmg: 9,  r: 14, xp: 2, color: '#6aa84f' },
+    boar:      { hp: 35, speed: 60, dmg: 12, r: 17, xp: 3, color: '#8a5a3c' },
+    pixie:     { hp: 14, speed: 125, dmg: 7, r: 9,  xp: 2, color: '#ff9fe8' },
+    troll:     { hp: 140, speed: 38, dmg: 22, r: 28, xp: 12, color: '#7d8f6a' },
+    hippie:    { hp: 157000, speed: 70, dmg: 30, r: 58, xp: 0, color: '#ff9de2' }, // boss, spawned by spawnBoss() at 20:00
+  };
+
+  function spawnTable(t) {
+    const table = [['slug', 5], ['bat', 3]];
+    if (t > 30) table.push(['goblin', 4]);
+    if (t > 75) table.push(['boar', 3]);
+    if (t > 120) table.push(['pixie', 3]);
+    if (t > 180) table.push(['troll', 1]);
+    const total = table.reduce((s, e) => s + e[1], 0);
+    let r = Math.random() * total;
+    for (const [k, w] of table) { if ((r -= w) <= 0) return k; }
+    return 'slug';
+  }
+
+  // ---------- Upgrades ----------
+  const SKILL_MAX = 15;
+
+  // Mycelium Tendrils per level: branches = how many new enemies each struck enemy branches to,
+  // depth = how many times it branches, maxHits = hard cap on enemies hit per cast (keeps growth from going exponential)
+  function tendrilBase(lvl) {
+    const early = [null, [2, 1, 3], [2, 2, 6], [3, 2, 8], [3, 2, 10], [3, 3, 12]];
+    const [branches, depth, maxHits] = lvl <= 5 ? early[lvl] : [4, lvl >= 10 ? 4 : 3, 2 + lvl * 2];
+    return { branches, depth, maxHits };
+  }
+  const tendrilDamage = lvl => 12 + lvl * 4;
+  const tendrilCooldown = lvl => Math.max(0.6, 2.2 - lvl * 0.1);
+  // Tendril stats for a given level, after any skill modifiers
+  function tendrilCfg(p, lvl) {
+    const c = { ...tendrilBase(lvl), dmgMult: 1 };
+    if (hasMod(p, 'tendril', 'taproot')) { c.depth = 0; c.maxHits = 1; c.dmgMult = 3; }
+    if (hasMod(p, 'tendril', 'web')) { c.branches += 1; c.depth += 1; c.maxHits = Math.round(c.maxHits * 1.5); c.dmgMult = 0.6; }
+    if (S && S.player && aug('tendril', 'network') && c.depth > 0) { c.branches += 1; c.maxHits = Math.round(c.maxHits * 1.5); }
+    if (S && S.player && aug('tendril', 'thickhyphae')) c.dmgMult *= 1.4;
+    return c;
+  }
+
+  // Skill modifiers: at skill levels 5, 10 and 15, pick one of two that change how the skill behaves (permanent).
+  // MODIFIERS[skill][tier] lists default pairs per level; MOD_TREES below turns them into branching paths.
+  const MODIFIERS = {
+    bolt: [
+      [{ id: 'scatter', name: 'Scattershot', desc: '+2 spore shots in a wide fan, but each deals 30% less damage.' },
+       { id: 'heavy', name: 'Heavy Spore', desc: 'Fires one big spore shot that deals 2.5× damage.' }],
+      [{ id: 'burst', name: 'Spore Burst', desc: 'Shots explode on hit, dealing 50% damage to nearby enemies.' },
+       { id: 'rapid', name: 'Rapid Spores', desc: 'Fires 40% faster.' }],
+      [{ id: 'homing', name: 'Seeking Spores', desc: 'Shots curve toward the nearest enemy.' },
+       { id: 'twin', name: 'Twin Volley', desc: 'Also fires a full volley behind you.' }],
+    ],
+    orbit: [
+      [{ id: 'wide', name: 'Wide Ring', desc: 'Buddies circle 60% farther out, protecting a bigger area.' },
+       { id: 'frenzy', name: 'Buddy Frenzy', desc: 'Buddies spin twice as fast and hit more often, but deal 25% less damage.' }],
+      [{ id: 'more', name: 'Bring Friends', desc: '+2 mushroom buddies.' },
+       { id: 'bouncy', name: 'Bouncy Caps', desc: 'Buddies knock enemies back 3× as far.' }],
+      [{ id: 'giant', name: 'Giant Buddies', desc: 'Buddies grow huge: bigger hits and +50% damage.' },
+       { id: 'ring2', name: 'Double Ring', desc: 'A second ring of buddies spins the other way, closer to you.' }],
+    ],
+    aura: [
+      [{ id: 'fog', name: 'Toxic Fog', desc: 'Cloud is 50% bigger, but deals 30% less damage.' },
+       { id: 'choke', name: 'Choking Spores', desc: 'Enemies inside the cloud are slowed by 50%.' }],
+      [{ id: 'pulse', name: 'Puff Pulse', desc: 'Every 3 seconds the cloud bursts for 6× damage.' },
+       { id: 'feast', name: 'Spore Feast', desc: 'Heal 0.5 HP for each enemy in the cloud (up to 3 HP per tick).' }],
+      [{ id: 'weaken', name: 'Softening Spores', desc: 'Enemies in the cloud take 25% more damage from everything.' },
+       { id: 'rot', name: 'Bursting Rot', desc: 'Enemies that die in the cloud burst, damaging enemies around them.' }],
+    ],
+    tendril: [
+      [{ id: 'taproot', name: 'Taproot', desc: 'No splits. One thick tendril hits a single enemy for 3× damage.' },
+       { id: 'web', name: 'Fungal Web', desc: '+1 branch and +1 split (hit cap ×1.5), but every hit deals 40% less damage.' }],
+      [{ id: 'quick', name: 'Quick Roots', desc: 'Tendrils lash out twice as often.' },
+       { id: 'entangle', name: 'Entangle', desc: 'Enemies hit are rooted in place for 1 second.' }],
+      [{ id: 'leech', name: 'Leech Roots', desc: 'Heal 1 HP for every enemy a tendril hits.' },
+       { id: 'echo', name: 'Echo Strike', desc: 'Every tendril strikes again half a second later for 50% damage.' }],
+    ],
+    thorn: [
+      [{ id: 'barrage', name: 'Thorn Barrage', desc: 'Bursts twice as often, but each thorn deals 40% less damage.' },
+       { id: 'bramble', name: 'Bramble Lances', desc: 'Thorns fly 60% farther and pierce 4 more enemies.' }],
+      [{ id: 'poison', name: 'Poison Thorns', desc: 'Thorns poison enemies for 2 seconds of extra damage.' },
+       { id: 'double', name: 'Double Burst', desc: 'A second ring of thorns follows each burst.' }],
+      [{ id: 'splinter', name: 'Splinters', desc: 'Thorns shatter into 2 smaller thorns when they finish.' },
+       { id: 'armor', name: 'Thorn Armor', desc: 'Anything that bites you takes heavy thorn damage.' }],
+    ],
+  };
+  const SKILL_NAMES = { clone: 'Propagate', bolt: 'Spore Shot', orbit: 'Mushroom Buddies', aura: 'Puffball Cloud', tendril: 'Mycelium Tendrils', thorn: 'Thorn Nova' };
+  // Branching modifier trees: a/b at level 5, then one letter per later pick, so the options at level 10 depend on the
+  // level 5 pick (A -> C/D at 'aa'/'ab', B -> E/F at 'ba'/'bb') and the options at level 15 depend on the level 10 pick.
+  // Branches default to the skill's MODIFIERS pairs; a skill overrides individual branches with its own options.
+  const MOD_CODES = ['a', 'b', 'aa', 'ab', 'ba', 'bb', 'aaa', 'aab', 'aba', 'abb', 'baa', 'bab', 'bba', 'bbb'];
+  const MOD_TREES = Object.fromEntries(Object.entries(MODIFIERS).map(([k, tiers]) =>
+    [k, Object.fromEntries(MOD_CODES.map(c => [c, tiers[c.length - 1][c.endsWith('a') ? 0 : 1]]))]));
+  Object.assign(MOD_TREES.bolt, {
+    bb: { id: 'concussive', name: 'Concussive Spores', desc: 'Each hit gives the enemy a Concussive stack (max 12): +5% Spore Shot damage to it per stack. Stacks fall off after 5 seconds without a new one.' },
+    bba: { id: 'vulnerable', name: 'Vulnerable Spores', desc: 'Enemies hit by Spore Shot take 10% increased damage for 3 seconds, stacking up to three times.' },
+    bbb: { id: 'twinshot', name: 'Twin Shot', desc: 'Fires a secondary projectile immediately after the first that deals half damage.' },
+  });
+  MOD_TREES.clone = {
+    a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 5 seconds, dealing damage equal to half your max HP in a large area. Respawns every 10 seconds.' },
+    aa: { id: 'extratrauma', name: 'Extra Traumatic', desc: 'Clones explode after 2 seconds and respawn twice as fast.' },
+    aaa: { id: 'stable', name: 'Emotionally Stable', desc: 'Clones explode every 2 seconds and no longer despawn after exploding.' },
+    aab: { id: 'lingering', name: 'Lingering Trauma', desc: 'The explosion area detonates two more times after the clone dies: first for 50% damage, then for 150%.' },
+    ab: { id: 'abandon', name: 'Abandonment Issues', desc: 'Your clone runs toward the strongest enemy when it spawns.' },
+    aba: { id: 'runaway', name: 'Runaway', desc: 'Your clone moves twice as fast.' },
+    abb: { id: 'walkaway', name: 'Walkaway', desc: 'Your clone moves at 50% speed but deals double damage.' },
+    b: { id: 'extraclone', name: 'Extra Propagation', desc: 'Spawn a second clone behind you.' },
+    ba: { id: 'nation', name: 'Propagation Nation', desc: 'Spawn a third clone behind you.' },
+    baa: { id: 'colony', name: 'Establish Colony', desc: 'All clones attack at full strength.' },
+    bab: { id: 'funguys', name: 'Fun Guys', desc: 'Clones attack twice as often, but use your skills with randomly picked modifiers.' },
+    bb: { id: 'shielding', name: 'Shielding Shrooms', desc: 'Each clone gives a 10% chance to block any instance of damage.' },
+    bba: { id: 'bulletproof', name: 'Bulletproof Shrooms', desc: 'Each clone gives a 20% chance to block damage, and you regenerate 5% max HP every 5 seconds.' },
+    bbb: { id: 'sacrifice', name: 'Sacrificial Shrooms', desc: 'If you would die, a clone sacrifices itself and you live at 50% health. It regrows after 60 seconds.' },
+  };
+  // p.mods[skill] holds the codes picked so far, e.g. ['b', 'bb', 'bba']
+  const hasMod = (p, k, id) => (p.mods[k] || []).some(c => MOD_TREES[k][c].id === id);
+  const modOptions = (p, k) => { const last = (p.mods[k] || []).at(-1) || ''; return [last + 'a', last + 'b']; };
+  const modTierFor = lvl => (lvl % 5 === 0 ? lvl / 5 - 1 : -1);
+
+  const UPGRADES = [
+    { id: 'bolt', name: 'Spore Shot', desc: 'Fires more spore shots, faster.', max: SKILL_MAX,
+      type: 'active', apply: p => { p.w.bolt.level++; } },
+    { id: 'orbit', name: 'Mushroom Buddies', desc: 'Little mushroom friends circle you and bonk hungry foes.', max: SKILL_MAX,
+      type: 'active', apply: p => { p.w.orbit.level++; } },
+    { id: 'aura', name: 'Puffball Cloud', desc: 'A poison spore cloud damages nearby enemies.', max: SKILL_MAX,
+      type: 'active', apply: p => { p.w.aura.level++; } },
+    { id: 'tendril', name: 'Mycelium Tendrils', desc: 'A root tendril lashes an enemy, then branches off to strike two more.', max: SKILL_MAX,
+      info: p => { const c = tendrilCfg(p, (p.upgrades.tendril || 0) + 1); return c.depth === 0 ? `single target · 3× damage` : `${c.branches} branches · ${c.depth} split${c.depth > 1 ? 's' : ''} · up to ${c.maxHits} hits`; },
+      type: 'active', apply: p => { p.w.tendril.level++; } },
+    { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
+      type: 'active', apply: p => { p.w.thorn.level++; } },
+    { id: 'clone', name: 'Propagate', desc: 'Grows a clone of you that follows you around and uses your skills at reduced strength.', max: SKILL_MAX,
+      info: p => `${Math.round(cloneEff((p.upgrades.clone || 0) + 1) * 100)}% strength`,
+      type: 'active', apply: p => { p.w.clone.level++; } },
+    { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
+      type: 'passive', apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); } },
+    { id: 'speed', name: 'Speedy Roots', desc: '+10% movement speed.', max: 5,
+      type: 'passive', apply: p => { p.speed *= 1.1; } },
+    { id: 'might', name: 'Toxic Gills', desc: '+15% damage for all attacks.', max: 6,
+      type: 'passive', apply: p => { p.might *= 1.15; } },
+    { id: 'magnet', name: 'Mycelium Net', desc: '+40% spore pickup range.', max: 4,
+      type: 'passive', apply: p => { p.magnet *= 1.4; } },
+    { id: 'regen', name: 'Regrowth', desc: 'Regrow 0.5 HP per second.', max: 5,
+      type: 'passive', apply: p => { p.regen += 0.5; } },
+    { id: 'xpgain', name: 'Hungry Hyphae', desc: '+10% XP from spores (double XP at level 10).', max: 10,
+      info: p => `+${((p.upgrades.xpgain || 0) + 1) * 10}% XP`,
+      type: 'passive', apply: p => { p.xpMult += 0.1; } },
+    { id: 'crystalluck', name: 'Geode Sense', desc: '+15% crystal drops, including the crystals each shop visit can bring (2.5× at level 10).', max: 10,
+      info: p => `+${((p.upgrades.crystalluck || 0) + 1) * 15}% crystal drops`,
+      type: 'passive', apply: p => { p.crystalLuck += 0.15; } },
+  ];
+
+  // ---------- State ----------
+  let S;
+  function newGame() {
+    S = {
+      t: 0, kills: 0, running: true, paused: false, spawnAcc: 0,
+      player: {
+        x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0, xpMult: 1, crystalLuck: 1, slots: { ...SLOT_START }, aug: {},
+        level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {}, mods: {}, crystals: { blue: 0, green: 0, red: 0, purple: 0 },
+        w: {
+          bolt: { level: 1, cd: 0 },
+          orbit: { level: 0, angle: 0, hitCd: new Map() },
+          aura: { level: 0, tick: 0 },
+          thorn: { level: 0, cd: 0 },
+          tendril: { level: 0, cd: 0 },
+          clone: { level: 0 },
+        },
+      },
+      enemies: [], bullets: [], tendrils: [], delayed: [], clones: [], hazards: [], auntie: null, boss: null, bossDefeated: false, eliteAt: ELITE_FROM + rand(0, 15), crystals: [], merchant: null, shopCycle: 0, cycleDrops: 0, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
+      shroomTimers: { red: rand(8, 14), blue: rand(16, 24), gold: rand(26, 36) },
+      forage: { red: { count: 0, level: 0, picks: {} }, blue: { count: 0, level: 0, picks: {} }, gold: { count: 0, level: 0, picks: {} } },
+      pendingForage: [],
+    };
+  }
+
+  // ---------- Spawning ----------
+  // How enemies grow over a run (t in seconds). Health accelerates (about 4.4x at 4 min, 15x at 10, 47x at 20) and damage
+  // grows steadily (1.6x, 2.5x, 4x); spore XP follows the gentler original curve so tougher enemies don't speed up levelling.
+  const hpScale = t => 1 + t / 120 + (t / 200) ** 2;
+  const dmgScale = t => 1 + t / 400;
+  const xpScale = t => 1 + t / 150;
+
+  // Normally spawns just off screen; the opening wave passes its own type, angle and distance
+  function spawnEnemy(type = spawnTable(S.t), ang = Math.random() * Math.PI * 2, d = Math.max(W, H) * 0.6 + 60) {
+    const p = S.player;
+    const def = ENEMIES[type];
+    const scale = hpScale(S.t);
+    S.enemies.push({
+      type, x: p.x + Math.cos(ang) * d, y: p.y + Math.sin(ang) * d,
+      hp: def.hp * scale, maxHp: def.hp * scale, toughness: xpScale(S.t), r: def.r, speed: def.speed * rand(0.9, 1.1),
+      dmg: def.dmg * dmgScale(S.t), xp: def.xp, flash: 0, phase: Math.random() * 6.28, kx: 0, ky: 0,
+    });
+  }
+
+  // ---------- Forage: magic mushrooms level up ----------
+  // Every 5 mushrooms of a type gives that type a Forage level (max 5). Each level offers 3 random enhancements from a
+  // pool (generic ones for any type, plus ones unique to that type); picks can repeat and stack.
+  const SHROOM_TYPES = {
+    red: { name: 'Red mushrooms', color: '#ff4b4b', interval: [36, 54] },
+    blue: { name: 'Blue mushrooms', color: '#4bb8ff', interval: [36, 54] },
+    gold: { name: 'Golden mushrooms', color: '#ffd84a', interval: [40, 60] },
+  };
+  const FORAGE_MAX = 5, FORAGE_EVERY = 5;
+  const FORAGE_POOL = [
+    // generic: offered for every type, affect that type
+    { id: 'bountiful', name: 'Bountiful', desc: t => `${SHROOM_TYPES[t].name} appear 35% more often.` },
+    { id: 'crystalcap', name: 'Crystal Cap', max: 4, desc: t => `${SHROOM_TYPES[t].name} have a +25% chance to give a random blue or green crystal when collected.` },
+    { id: 'longlived', name: 'Long-lived', desc: t => `${SHROOM_TYPES[t].name} last 15 seconds longer before wilting.` },
+    { id: 'sporebloom', name: 'Spore Bloom', desc: t => `${SHROOM_TYPES[t].name} give 10% of a level's XP when collected.` },
+    { id: 'lure', name: 'Lure', desc: t => `${SHROOM_TYPES[t].name} roll toward you from 150 px farther away.` },
+    // red: healing
+    { id: 'hearty', type: 'red', name: 'Hearty Cap', desc: () => 'Each red mushroom you collect permanently gives +5 max HP.' },
+    { id: 'bigbite', type: 'red', name: 'Big Bite', desc: () => 'Red mushrooms heal 50% more.' },
+    { id: 'thickskin', type: 'red', name: 'Thick Skin', max: 3, desc: () => 'After eating a red mushroom, take 20% less damage for 10 seconds.' },
+    // blue: speed
+    { id: 'fleet', type: 'blue', name: 'Fleet Foot', desc: () => 'Each blue mushroom you collect permanently gives +2% movement speed.' },
+    { id: 'longrush', type: 'blue', name: 'Long Rush', desc: () => 'Blue mushroom speed boosts last 4 seconds longer.' },
+    { id: 'rushdamage', type: 'blue', name: 'Rush Strike', desc: () => 'While speed boosted, all your attacks deal 25% more damage.' },
+    // gold: spore pull
+    { id: 'vacuum', type: 'gold', name: 'Spore Vacuum', desc: () => 'Spores pulled in by a golden mushroom give 25% more XP.' },
+    { id: 'goldentouch', type: 'gold', name: 'Golden Touch', desc: () => 'Each golden mushroom you collect permanently gives +2% XP.' },
+    { id: 'gilded', type: 'gold', name: 'Gilded Haze', max: 4, desc: () => 'Spores pulled in by a golden mushroom have a 20% chance to upgrade a color (green → pink → golden).' },
+  ];
+  const forageStacks = (t, id) => S.forage[t].picks[id] || 0;
+  const forageFreq = t => (1 + 0.35 * forageStacks(t, 'bountiful')) / (1 + S.t / 300); // ~5x rarer by 20 minutes
+
+  function spawnShroom(kind, x, y) {
+    const p = S.player, ang = Math.random() * Math.PI * 2, d = rand(150, 400);
+    S.shrooms.push({ kind, x: x ?? p.x + Math.cos(ang) * d, y: y ?? p.y + Math.sin(ang) * d, life: 30 + 15 * forageStacks(kind, 'longlived') });
+  }
+
+  function collectShroom(m) {
+    const p = S.player, t = m.kind, st = id => forageStacks(t, id), say = (txt, color) => S.texts.push({ x: p.x, y: p.y - 30, txt, life: 1, color });
+    if (t === 'red') {
+      if (st('hearty')) { p.maxHp += 5 * st('hearty'); p.hp += 5 * st('hearty'); }
+      const amt = Math.round(30 * (1 + 0.5 * st('bigbite')));
+      p.hp = Math.min(p.maxHp, p.hp + amt); say(`+${amt} HP`, '#ff8a8a');
+      if (st('thickskin')) p.thickSkin = 10;
+    }
+    if (t === 'blue') {
+      if (st('fleet')) p.speed *= 1 + 0.02 * st('fleet');
+      p.speedBoost = 8 + 4 * st('longrush'); say('Speed!', '#6bc7ff');
+    }
+    if (t === 'gold') {
+      for (const g of S.gems) {
+        g.pull = true; g.vacuum = st('vacuum');
+        if (Math.random() < 0.2 * st('gilded') && g.tier !== 'gold') { const to = g.tier === 'pink' ? 'gold' : 'pink'; g.v *= SPORES[to].mult / SPORES[g.tier || 'green'].mult; g.tier = to; }
+      }
+      S.crystals.forEach(c => c.pull = true);
+      if (st('goldentouch')) p.xpMult += 0.02 * st('goldentouch');
+      say('Spore storm!', '#ffd84a');
+    }
+    if (Math.random() < 0.25 * st('crystalcap')) { const k = Math.random() < 0.5 ? 'blue' : 'green'; p.crystals[k]++; S.texts.push({ x: p.x, y: p.y - 46, txt: `+1 ${k} crystal`, life: 1, color: CRYSTALS[k].color }); }
+    if (st('sporebloom')) p.xp += p.xpNext * 0.1 * st('sporebloom');
+    // Forage progress
+    const f = S.forage[t];
+    f.count++;
+    if (f.level < FORAGE_MAX && f.count >= (f.level + 1) * FORAGE_EVERY) { f.level++; S.pendingForage.push(t); }
+  }
+
+  function showForageChoice(t) {
+    const f = S.forage[t];
+    document.getElementById('slotInfo').textContent = '';
+    S.paused = true;
+    document.getElementById('levelTitle').textContent = `Forage: ${SHROOM_TYPES[t].name} reached level ${f.level}! Choose an enhancement`;
+    const pool = FORAGE_POOL.filter(o => (!o.type || o.type === t) && (!o.max || forageStacks(t, o.id) < o.max));
+    const picks = [];
+    while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    const cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    for (const o of picks) {
+      const div = document.createElement('div');
+      const n = forageStacks(t, o.id);
+      div.className = 'card forage';
+      div.style.setProperty('--fc', SHROOM_TYPES[t].color);
+      div.innerHTML = `<b>${o.name}</b><span>${o.desc(t)}</span><small>${o.type ? 'Only for ' + SHROOM_TYPES[t].name.toLowerCase() : 'Any mushroom'}${n ? ` · you have ×${n}` : ''}</small>`;
+      div.onclick = () => { f.picks[o.id] = n + 1; logEvent('forage', { color: t, name: o.name, forageLevel: f.level }); resumeGame(); };
+      cards.appendChild(div);
+    }
+    document.getElementById('levelup').classList.remove('hidden');
+  }
+
+
+
+  // ---------- Performance helpers ----------
+  // Projectile budget: past this many projectiles, new volleys fire fewer, stronger shots (same total damage)
+  const BULLET_BUDGET = 300, MAX_TEXTS = 40, MAX_PARTICLES = 250;
+  const budgetCount = n => (S.bullets.length > BULLET_BUDGET ? Math.max(4, Math.round(n * BULLET_BUDGET / S.bullets.length)) : n);
+  // Spatial grid of enemies, rebuilt each frame, so projectiles only check enemies near them
+  const GRID = 96;
+  let grid = new Map();
+  function buildGrid() {
+    grid = new Map();
+    for (const e of S.enemies) {
+      const k = Math.floor(e.x / GRID) * 65536 + Math.floor(e.y / GRID);
+      let cell = grid.get(k); if (!cell) grid.set(k, cell = []); cell.push(e);
+    }
+  }
+  function forNearby(x, y, rad, fn) {
+    const x0 = Math.floor((x - rad) / GRID), x1 = Math.floor((x + rad) / GRID), y0 = Math.floor((y - rad) / GRID), y1 = Math.floor((y + rad) / GRID);
+    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
+      const cell = grid.get(cx * 65536 + cy);
+      if (cell) for (const e of cell) if (fn(e) === false) return;
+    }
+  }
+  const inView = (x, y, m = 40) => { const p = S.player; return Math.abs(x - p.x) < W / 2 + m && Math.abs(y - p.y) < H / 2 + m; };
+
+  function damageEnemy(e, dmg, kx = 0, ky = 0) {
+    if (aug('might', 'toxicburst') && Math.random() < 0.1) dmg *= 2; // Toxic Burst
+    if (S.player.speedBoost > 0) dmg *= 1 + 0.25 * forageStacks('blue', 'rushdamage'); // Rush Strike
+    if (e.vuln > 0) dmg *= 1.25;
+    if (e.vulnT > 0) dmg *= 1 + 0.1 * e.vulnStacks;
+    e.hp -= dmg; e.flash = 0.1; e.kx += kx; e.ky += ky;
+    if (S.texts.length < MAX_TEXTS && inView(e.x, e.y)) S.texts.push({ x: e.x, y: e.y - e.r, txt: Math.round(dmg), life: 0.6 });
+  }
+
+  // Spore tiers: green is the base value; pink (2x) and golden (5x) get more common as the run goes on,
+  // to offset the XP needed per level growing faster than enemy count
+  const SPORES = {
+    green: { mult: 1, color: '#9dff8a', r: 3.2 },
+    pink: { mult: 2, color: '#ff8ad8', r: 4 },
+    gold: { mult: 5, color: '#ffd84a', r: 4.8 },
+  };
+  function sporeTier() {
+    const min = S.t / 60, r = Math.random();
+    const boost = aug('xpgain', 'goldspores') ? 1.5 : 1, gold = Math.min(0.08, 0.006 * min) * boost, pink = Math.min(0.25, 0.02 + 0.02 * min) * boost;
+    return r < gold ? 'gold' : r < gold + pink ? 'pink' : 'green';
+  }
+
+  function killEnemy(e) {
+    S.kills++;
+    if (e.rot > 0) { // Bursting Rot
+      const dmg = (3 + S.player.w.aura.level * 2) * S.player.might * 3;
+      for (const o of S.enemies) if (o !== e && o.hp > 0 && dist2(o, e) < 70 * 70) damageEnemy(o, dmg);
+      for (let i = 0; i < 10; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-200, 200), vy: rand(-200, 200), life: 0.4, color: '#b4e05a' });
+    }
+    for (let i = 0; i < 8; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.5, color: ENEMIES[e.type].color });
+    const tier = sporeTier();
+    // Spores are worth more from tougher enemies, matching how enemy health grows over the run
+    S.gems.push({ x: e.x, y: e.y, v: e.xp * SPORES[tier].mult * (e.toughness || 1) * XP_GAIN, big: e.xp >= 5, tier });
+    if (Math.random() < 0.005 * forageFreq('red')) spawnShroom('red', e.x, e.y);
+    // Crystals: trolls have a 2% red and 2% purple chance (outside the budget); common blue/green drops follow the budget
+    const budget = crystalBudgetMult();
+    if (e.type === 'troll') {
+      const r = Math.random();
+      const rare = aug('crystalluck', 'raregeode') ? 0.04 : 0.02;
+      if (r < rare) dropCrystal(e.x, e.y, 'red');
+      else if (r < rare * 2) dropCrystal(e.x, e.y, 'purple');
+      else if (Math.random() < budget) dropCrystal(e.x, e.y, Math.random() < 0.5 ? 'blue' : 'green');
+    } else if (Math.random() < 0.025 * S.player.crystalLuck * budget) dropCrystal(e.x + rand(-8, 8), e.y + rand(-8, 8), Math.random() < 0.5 ? 'blue' : 'green');
+  }
+
+  // ---------- Weapons ----------
+  function nearestEnemy(range, from = S.player) {
+    let best = null, bd = range * range;
+    for (const e of S.enemies) { const d = dist2(e, from); if (d < bd) { bd = d; best = e; } }
+    return best;
+  }
+
+  const orbitRadius = p => (60 + p.w.orbit.level * 4) * (hasMod(p, 'orbit', 'wide') ? 1.6 : 1) * (aug('orbit', 'wideorbit') ? 1.3 : 1);
+  const orbitCount = p => 2 + Math.floor((p.w.orbit.level - 1) / 2) + (hasMod(p, 'orbit', 'more') ? 2 : 0) + (aug('orbit', 'crowd') ? 2 : 0);
+  const orbitSize = p => (hasMod(p, 'orbit', 'giant') ? 2 : 1);
+  const auraRadius = p => (60 + p.w.aura.level * 8) * (hasMod(p, 'aura', 'fog') ? 1.5 : 1) * (aug('aura', 'billow') ? 1.3 : 1);
+  // Buddy positions: outer ring, plus an inner counter-rotating ring with Double Ring
+  function orbitPositions(p) {
+    const o = p.w.orbit, n = orbitCount(p), rad = orbitRadius(p), out = [];
+    for (let i = 0; i < n; i++) { const a = o.angle + (i / n) * Math.PI * 2; out.push({ a, x: p.x + Math.cos(a) * rad, y: p.y + Math.sin(a) * rad }); }
+    if (hasMod(p, 'orbit', 'ring2')) {
+      const m = Math.ceil(n / 2);
+      for (let i = 0; i < m; i++) { const a = -o.angle * 1.3 + (i / m) * Math.PI * 2; out.push({ a, x: p.x + Math.cos(a) * rad * 0.55, y: p.y + Math.sin(a) * rad * 0.55 }); }
+    }
+    return out;
+  }
+  const later = (delay, fn) => S.delayed.push({ t: delay, fn });
+
+  function fireThornRing(p, offset) {
+    const w = p.w.thorn, full = 6 + w.level * 2 + (aug('thorn', 'storm') ? 12 : 0), n = budgetCount(full);
+    const dmg = (6 + w.level * 3) * p.might * (hasMod(p, 'thorn', 'barrage') ? 0.6 : 1) * (full / n) * (aug('thorn', 'sharp') ? 1.4 : 1);
+    const bramble = hasMod(p, 'thorn', 'bramble');
+    for (let i = 0; i < n; i++) {
+      const a = ((i + offset) / n) * Math.PI * 2;
+      S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, r: 4, dmg, life: bramble ? 1.45 : 0.9, pierce: bramble ? 6 : 2, kind: 'thorn', hit: new Set(),
+        poison: hasMod(p, 'thorn', 'poison'), splinter: hasMod(p, 'thorn', 'splinter') });
+    }
+  }
+
+  function tendrilStrike(p, x1, y1, e, dmg, thick) {
+    S.tendrils.push({ x1, y1, x2: e.x, y2: e.y, life: thick ? 0.55 : 0.4, seed: Math.random() * 99, thick });
+    damageEnemy(e, dmg);
+    if (hasMod(p, 'tendril', 'entangle')) e.rooted = 1;
+    if (hasMod(p, 'tendril', 'leech')) heal(1);
+    if (hasMod(p, 'tendril', 'echo')) later(0.5, () => { if (e.hp > 0) { S.tendrils.push({ x1, y1, x2: e.x, y2: e.y, life: 0.3, seed: Math.random() * 99, thick }); damageEnemy(e, dmg * 0.5); } });
+  }
+
+  const heal = n => { const p = S.player; p.hp = Math.min(p.maxHp, p.hp + n); };
+
+  // Runs every active skill for a caster: the player, or a clone (which has its own position, cooldowns and modifiers)
+  function updateWeapons(p, dt) {
+    const w = p.w;
+
+    // Spore shot: aimed at nearest enemies
+    if (w.bolt.level > 0) {
+      w.bolt.cd -= dt;
+      if (w.bolt.cd <= 0) {
+        w.bolt.cd = w.bolt.cdMax = Math.max(0.2, 0.9 - w.bolt.level * 0.05) * (hasMod(p, 'bolt', 'rapid') ? 0.6 : 1);
+        let count = 1 + Math.floor(w.bolt.level / 3), spread = 0.18, dmg = (8 + w.bolt.level * 2) * p.might * (aug('bolt', 'dense') ? 1.4 : 1), pierce = 1 + Math.floor(w.bolt.level / 4) + (aug('bolt', 'longshot') ? 2 : 0), r = 5;
+        if (hasMod(p, 'bolt', 'scatter')) { count += 2; spread = 0.3; dmg *= 0.7; }
+        if (hasMod(p, 'bolt', 'heavy')) { count = 1; dmg *= 2.5; r = 9; }
+        if (aug('bolt', 'overgrowth')) count += 2; // augments apply after modifiers, so this stacks even with Heavy Spore
+        const target = nearestEnemy(500, p);
+        const base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
+        const volleys = hasMod(p, 'bolt', 'twin') ? [base, base + Math.PI] : [base];
+        const fire = mult => {
+          const shots = budgetCount(count), boost = count / shots;
+          for (const dirA of volleys) for (let i = 0; i < shots; i++) {
+            const a = dirA + (i - (shots - 1) / 2) * spread * (count / shots);
+            const sp = aug('bolt', 'longshot') ? 630 : 420;
+            S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: r * (mult < 1 ? 0.7 : 1), dmg: dmg * mult * boost, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
+              burst: hasMod(p, 'bolt', 'burst'), homing: hasMod(p, 'bolt', 'homing'), concussive: hasMod(p, 'bolt', 'concussive'), vulnerable: hasMod(p, 'bolt', 'vulnerable') });
+          }
+        };
+        fire(1);
+        if (hasMod(p, 'bolt', 'twinshot')) later(0.08, () => fire(0.5));
+      }
+    }
+
+    // Thorn nova: radial burst
+    if (w.thorn.level > 0) {
+      w.thorn.cd -= dt;
+      if (w.thorn.cd <= 0) {
+        w.thorn.cd = w.thorn.cdMax = Math.max(0.8, 3 - w.thorn.level * 0.15) * (hasMod(p, 'thorn', 'barrage') ? 0.5 : 1) * (aug('thorn', 'quickbloom') ? 0.7 : 1);
+        fireThornRing(p, 0);
+        if (hasMod(p, 'thorn', 'double')) later(0.3, () => fireThornRing(p, 0.5));
+      }
+    }
+
+    // Mushroom buddies: rotating mushrooms
+    if (w.orbit.level > 0) {
+      const frenzy = hasMod(p, 'orbit', 'frenzy');
+      w.orbit.angle += dt * (2.2 + w.orbit.level * 0.15) * (frenzy ? 2 : 1);
+      for (const [e, cd] of w.orbit.hitCd) { if (cd - dt <= 0) w.orbit.hitCd.delete(e); else w.orbit.hitCd.set(e, cd - dt); }
+      const hitR = 12 * orbitSize(p), knock = 150 * (hasMod(p, 'orbit', 'bouncy') ? 3 : 1);
+      const dmg = (10 + w.orbit.level * 4) * p.might * (frenzy ? 0.75 : 1) * (hasMod(p, 'orbit', 'giant') ? 1.5 : 1) * (aug('orbit', 'hardy') ? 1.4 : 1);
+      for (const b of orbitPositions(p)) {
+        for (const e of S.enemies) {
+          if (w.orbit.hitCd.has(e)) continue;
+          if ((e.x - b.x) ** 2 + (e.y - b.y) ** 2 < (e.r + hitR) ** 2) {
+            damageEnemy(e, dmg, Math.cos(b.a) * knock, Math.sin(b.a) * knock);
+            w.orbit.hitCd.set(e, frenzy ? 0.2 : 0.4);
+          }
+        }
+      }
+    }
+
+    // Mycelium tendrils: strike the nearest enemy, then branch outward to nearby enemies
+    if (w.tendril.level > 0) {
+      w.tendril.cd -= dt;
+      if (w.tendril.cd <= 0) {
+        const cfg = tendrilCfg(p, w.tendril.level), thick = hasMod(p, 'tendril', 'taproot');
+        const reach = aug('tendril', 'farreach') ? 1.5 : 1;
+        const first = nearestEnemy(280 * reach, p);
+        if (!first) w.tendril.cd = 0.3;
+        else {
+          w.tendril.cd = w.tendril.cdMax = tendrilCooldown(w.tendril.level) * (hasMod(p, 'tendril', 'quick') ? 0.5 : 1);
+          const dmg = tendrilDamage(w.tendril.level) * p.might * cfg.dmgMult;
+          const hit = new Set([first]);
+          tendrilStrike(p, p.x, p.y, first, dmg, thick);
+          let frontier = [first];
+          for (let gen = 1; gen <= cfg.depth && hit.size < cfg.maxHits; gen++) {
+            const next = [];
+            for (const src of frontier) {
+              const targets = S.enemies
+                .filter(e => !hit.has(e) && e.hp > 0 && dist2(e, src) < (170 * reach) ** 2)
+                .sort((a, b) => dist2(a, src) - dist2(b, src))
+                .slice(0, cfg.branches);
+              for (const e of targets) {
+                if (hit.size >= cfg.maxHits) break;
+                hit.add(e); next.push(e);
+                tendrilStrike(p, src.x, src.y, e, dmg * Math.pow(0.85, gen), thick);
+              }
+            }
+            frontier = next;
+          }
+        }
+      }
+    }
+
+    // Puffball cloud: damage over time
+    if (w.aura.level > 0) {
+      w.aura.tick -= dt;
+      w.aura.pulse = (w.aura.pulse || 0) - dt;
+      if (w.aura.tick <= 0) {
+        w.aura.tick = aug('aura', 'quickpuff') ? 0.36 : 0.5;
+        const pulse = hasMod(p, 'aura', 'pulse') && w.aura.pulse <= 0;
+        if (pulse) { w.aura.pulse = 3; w.aura.flash = 0.3; }
+        const rad = auraRadius(p);
+        let inside = 0;
+        for (const e of S.enemies) {
+          if (dist2(e, p) < (rad + e.r) ** 2) {
+            inside++;
+            if (hasMod(p, 'aura', 'choke')) e.slow = 0.6;
+            if (hasMod(p, 'aura', 'weaken')) e.vuln = 0.6;
+            if (hasMod(p, 'aura', 'rot')) e.rot = 0.6;
+            damageEnemy(e, (3 + w.aura.level * 2) * p.might * (hasMod(p, 'aura', 'fog') ? 0.7 : 1) * (pulse ? 6 : 1) * (aug('aura', 'potent') ? 1.4 : 1));
+          }
+        }
+        if (hasMod(p, 'aura', 'feast')) heal(Math.min(3, inside * 0.5));
+      }
+    }
+  }
+
+  // ---------- Propagate: clones ----------
+  const ACTIVE = ['bolt', 'orbit', 'aura', 'thorn', 'tendril'];
+  const cloneEff = lvl => 0.5 + 0.02 * Math.max(0, lvl - 1); // 50% at level 1, +2% per level
+  // A random modifier path for each skill, as deep as the player's own path (Fun Guys)
+  function randomMods(p) {
+    const mods = {};
+    for (const k of ACTIVE) { let path = ''; mods[k] = (p.mods[k] || []).map(() => (path += Math.random() < 0.5 ? 'a' : 'b')); }
+    return mods;
+  }
+  function newClone(i) {
+    const p = S.player;
+    return { i, x: p.x - p.face * 30 * (i + 1), y: p.y + 10, face: p.face, dead: false, respawn: 0, fuse: 0, target: null, funSig: '',
+      w: { bolt: { level: 0, cd: Math.random() }, orbit: { level: 0, angle: i * 1.3, hitCd: new Map() }, aura: { level: 0, tick: 0.25 }, thorn: { level: 0, cd: 1 + i * 0.4 }, tendril: { level: 0, cd: 0.5 + i * 0.3 } },
+      mods: p.mods, might: p.might };
+  }
+  function spawnClone(c) {
+    const p = S.player;
+    c.dead = false; c.x = p.x - p.face * 30; c.y = p.y + 10;
+    c.fuse = (hasMod(p, 'clone', 'extratrauma') ? 2 : 5) * (aug('clone', 'haste') ? 0.75 : 1);
+    c.target = null;
+    if (hasMod(p, 'clone', 'abandon')) c.target = S.enemies.reduce((best, e) => (!best || e.hp > best.hp ? e : best), null);
+    S.shockwaves.push({ x: c.x, y: c.y, r: 0, max: 40, life: 0.4, color: '#f3c1e8' });
+  }
+  function cloneExplode(x, y, mult) {
+    const p = S.player, rad = 150 * (aug('clone', 'kin') ? Math.sqrt(1.5) : 1); // Kinship: +50% area
+    const dmg = p.maxHp * 0.5 * p.might * (1 + 0.02 * (p.w.clone.level - 1)) * (hasMod(p, 'clone', 'walkaway') ? 2 : 1) * mult * (aug('clone', 'strongspawn') ? 1.4 : 1);
+    for (const e of S.enemies) if (dist2(e, { x, y }) < (rad + e.r) ** 2) damageEnemy(e, dmg, (e.x - x) * 2, (e.y - y) * 2);
+    S.shockwaves.push({ x, y, r: 0, max: rad, life: 0.6, color: '#ff8a5c' }, { x, y, r: -30, max: rad, life: 0.7, color: '#ffd84a' });
+    for (let i = 0; i < 30; i++) { const a = Math.random() * 6.28, sp = rand(100, 320); S.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), color: i % 2 ? '#ff8a5c' : '#f3e6c8' }); }
+  }
+  const aliveClones = () => S.clones.filter(c => !c.dead).length;
+
+  function updateClones(dt) {
+    const p = S.player, lvl = p.w.clone.level;
+    if (lvl <= 0) { S.clones = []; return; }
+    const bomber = hasMod(p, 'clone', 'trauma');
+    const want = bomber ? 1 : 1 + (hasMod(p, 'clone', 'extraclone') ? 1 : 0) + (hasMod(p, 'clone', 'nation') ? 1 : 0) + (aug('clone', 'kin') ? 1 : 0);
+    while (S.clones.length < want) { const c = newClone(S.clones.length); S.clones.push(c); spawnClone(c); }
+    S.clones.length = want;
+    const fun = hasMod(p, 'clone', 'funguys');
+    if (hasMod(p, 'clone', 'bulletproof')) heal(p.maxHp * 0.01 * dt); // 5% max HP every 5 seconds
+    for (const c of S.clones) {
+      if (c.dead) { if ((c.respawn -= dt) <= 0) spawnClone(c); continue; }
+      // Movement: chase the strongest enemy (Abandonment Issues), otherwise trail behind you in a fan
+      if (c.target && c.target.hp <= 0) c.target = S.enemies.reduce((best, e) => (!best || e.hp > best.hp ? e : best), null);
+      let tx, ty;
+      if (c.target) { tx = c.target.x; ty = c.target.y; }
+      else { const side = (c.i - (S.clones.length - 1) / 2) * 34; tx = p.x - p.face * 38 - Math.abs(side) * 0.3 * p.face; ty = p.y + side; }
+      const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy) || 1;
+      const speed = c.target ? 170 * (hasMod(p, 'clone', 'runaway') ? 2 : 1) * (hasMod(p, 'clone', 'walkaway') ? 0.5 : 1) : Math.max(p.speed * 1.2, d * 4);
+      const step = Math.min(d, speed * dt);
+      c.x += dx / d * step; c.y += dy / d * step;
+      if (Math.abs(dx) > 2) c.face = Math.sign(dx);
+      c.moving = d > 4;
+      if (bomber) {
+        if ((c.fuse -= dt) <= 0) {
+          const x = c.x, y = c.y;
+          cloneExplode(x, y, 1);
+          if (hasMod(p, 'clone', 'stable')) c.fuse = 2;
+          else {
+            c.dead = true; c.respawn = (hasMod(p, 'clone', 'extratrauma') ? 5 : 10) * (aug('clone', 'haste') ? 0.75 : 1);
+            if (hasMod(p, 'clone', 'lingering')) { later(0.6, () => cloneExplode(x, y, 0.5)); later(1.2, () => cloneExplode(x, y, 1.5)); }
+          }
+        }
+        continue;
+      }
+      // Attacking clone: mirror your skill levels; use your modifiers, or random ones with Fun Guys
+      for (const k of ACTIVE) c.w[k].level = p.w[k].level;
+      if (fun) {
+        const sig = ACTIVE.map(k => (p.mods[k] || []).length).join();
+        if (c.funSig !== sig) { c.funSig = sig; c.funMods = randomMods(p); }
+        c.mods = c.funMods;
+      } else c.mods = p.mods;
+      c.might = p.might * (hasMod(p, 'clone', 'colony') ? 1 : cloneEff(lvl)) * (aug('clone', 'strongspawn') ? 1.25 : 1);
+      updateWeapons(c, (fun ? dt * 2 : dt) * (aug('clone', 'haste') ? 1.25 : 1));
+    }
+  }
+
+  // ---------- Skill slots ----------
+  // You can hold 4 active and 4 passive skills; more slots are bought in the shop with rare crystals
+  // (purple for active slots, red for passive slots). Prices rise with each slot bought.
+  const SLOT_START = { active: 4, passive: 4 };
+  const SLOT_COST = { active: { kind: 'purple', prices: [2, 3] }, passive: { kind: 'red', prices: [2, 3, 4] } };
+  const slotsUsed = type => UPGRADES.filter(u => u.type === type && (S.player.upgrades[u.id] || 0) > 0).length;
+  const slotsMax = type => SLOT_START[type] + SLOT_COST[type].prices.length;
+  const nextSlotPrice = type => SLOT_COST[type].prices[S.player.slots[type] - SLOT_START[type]]; // undefined once all are bought
+  const canLearn = u => (S.player.upgrades[u.id] || 0) > 0 || slotsUsed(u.type) < S.player.slots[u.type];
+  const slotSummary = () => `Skill slots: active ${slotsUsed('active')}/${S.player.slots.active} · passive ${slotsUsed('passive')}/${S.player.slots.passive}`;
+
+  // ---------- Run log ----------
+  // Each run is saved to this page's storage (collection "runs") so Claude can read how real runs go: level and kills
+  // each minute, every pick, crystals, shop visits, elites, the boss, damage taken by source and what ended the run.
+  // Saved once a minute, when the tab is hidden, and at the end. Does nothing when the page has no storage (e.g. a local file).
+  const GAME_VERSION = 'v0.0.4-test';
+  const RUNLOG = { db: null, saving: false, again: false };
+  (async () => { try { RUNLOG.db = (await window.claude?.use?.('db')) || null; } catch { RUNLOG.db = null; } })();
+
+  function startRunLog() {
+    S.log = {
+      id: 'run-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e4).toString(36),
+      version: GAME_VERSION, startedAt: new Date().toISOString(), screen: { w: W, h: H, touch: matchMedia('(pointer: coarse)').matches },
+      status: 'playing', perMinute: [], levelTimes: [], events: [], damageBy: {}, crystalsGot: { blue: 0, green: 0, red: 0, purple: 0 },
+    };
+    S.logNextMinute = 60;
+  }
+  function logEvent(type, data = {}) {
+    if (!S.log || S.log.events.length >= 1500) return;
+    S.log.events.push({ t: Math.round(S.t), type, ...data });
+  }
+  function logSnapshot() {
+    const p = S.player;
+    return { min: Math.round(S.t / 60), level: p.level, kills: S.kills, hp: Math.round(p.hp), maxHp: Math.round(p.maxHp), enemies: S.enemies.length,
+      crystals: { ...p.crystals }, skills: Object.fromEntries(UPGRADES.filter(u => p.upgrades[u.id]).map(u => [u.id, p.upgrades[u.id]])) };
+  }
+  async function saveRunLog() {
+    if (!RUNLOG.db || !S.log) return;
+    if (RUNLOG.saving) { RUNLOG.again = true; return; } // one write at a time; save again right after if more happened
+    RUNLOG.saving = true;
+    const p = S.player;
+    const doc = { ...S.log, updatedAt: new Date().toISOString(), timeSec: Math.round(S.t), final: logSnapshot(),
+      mods: Object.fromEntries(Object.entries(p.mods).map(([k, codes]) => [k, codes.map(c => MOD_TREES[k][c].name)])),
+      forage: Object.fromEntries(Object.entries(S.forage).map(([t, f]) => [t, { collected: f.count, level: f.level, picks: f.picks }])),
+      slots: { ...p.slots }, augments: { ...p.aug }, bossDefeated: S.bossDefeated };
+    try { await RUNLOG.db.doc('runs/' + S.log.id).set(doc); } catch { /* storage unavailable or full: skip quietly */ }
+    RUNLOG.saving = false;
+    if (RUNLOG.again) { RUNLOG.again = false; saveRunLog(); }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden && S && S.running) saveRunLog(); });
+
+  // ---------- Player damage ----------
+  // Every hit on the player goes through here so blocking, Thick Skin and Sacrificial Shrooms apply to bites and boss
+  // attacks alike. Returns 'blocked', 'hit' or 'dead'.
+  function hurtPlayer(dmg, words = ['CHOMP!', 'NOM!', 'MUNCH!', 'Yum!'], source = 'bite') {
+    const p = S.player;
+    const block = aliveClones() * (hasMod(p, 'clone', 'bulletproof') ? 0.2 : hasMod(p, 'clone', 'shielding') ? 0.1 : 0);
+    p.hurt = aug('speed', 'slippery') ? 0.9 : 0.5;
+    if (Math.random() < block) { // Shielding Shrooms
+      S.texts.push({ x: p.x, y: p.y - 24, txt: 'Blocked!', life: 0.8, color: '#f3c1e8' });
+      S.shockwaves.push({ x: p.x, y: p.y, r: 0, max: 40, life: 0.3, color: '#f3c1e8' });
+      return 'blocked';
+    }
+    const taken = dmg * (p.thickSkin > 0 ? 1 - 0.2 * forageStacks('red', 'thickskin') : 1) * (aug('hp', 'bark') ? 0.9 : 1);
+    p.hp -= taken;
+    if (S.log) { S.log.damageBy[source] = Math.round((S.log.damageBy[source] || 0) + taken); S.lastHitBy = source; }
+    S.texts.push({ x: p.x + rand(-12, 12), y: p.y - 24, txt: words[Math.floor(Math.random() * words.length)], life: 0.8, color: '#ffcf6b' });
+    for (let i = 0; i < 5; i++) S.particles.push({ x: p.x, y: p.y - 8, vx: rand(-90, 90), vy: rand(-140, -20), life: 0.4, color: '#efe3c8' });
+    if (p.god) p.hp = Math.max(p.hp, 1); // test realm: invincible
+    if (p.hp <= 0 && hasMod(p, 'clone', 'sacrifice') && aliveClones()) { // Sacrificial Shrooms
+      const c = S.clones.find(c => !c.dead);
+      c.dead = true; c.respawn = 60;
+      p.hp = p.maxHp * 0.5;
+      cloneExplode(c.x, c.y, 0);
+      S.banner = { txt: 'A clone sacrificed itself to save you!', life: 3, color: '#f3c1e8' };
+    }
+    return p.hp <= 0 ? 'dead' : 'hit';
+  }
+
+  // ---------- Big enemies: the Giant Hippie boss (20:00) and elites (from 10:00) ----------
+  // Big enemies walk toward you, bite if they reach you, and between walks use telegraphed attacks:
+  //   slam: a circle is marked on you, then they leap onto it      dash: a lane is marked toward you, then they charge down it
+  //   ring: rings of slow projectiles with gaps                    fan:  aim lines flash, then a fan of projectiles flies at you
+  const BOSS_AT = 20 * 60, BOSS_HP = 157000; // scaled with enemy health at 20:00 (was 30,000 when enemies were 9x, now 47x)
+  const ELITE_FROM = 10 * 60, ELITE_HP = 1000; // elite HP = ELITE_HP x enemy health scale (15,000 at 10:00, about 47,000 at 20:00)
+  const BOSS_WORDS = ['MUNCHIES!', 'FAR OUT!', 'GROOVY!', 'NOM, MAN!'];
+  const BIG = {
+    hippie: { attacks: ['slam', 'ring', 'dash'], gap: [2, 3], bite: 30, words: BOSS_WORDS,
+      slam: { wind: 1.2, r: 110, dmg: 35 }, ring: { waves: 3, n: 14, speed: 150, dmg: 18, every: 0.65, dur: 2 }, dash: { wind: 1.0, len: 760, speed: 800, dmg: 40 } },
+    'elite-boar': { name: 'Truffle Tusker', base: 'boar', attacks: ['dash'], gap: [1.6, 2.6], bite: 18, words: ['GORED!', 'SNORT!'],
+      dash: { wind: 0.9, len: 560, speed: 720, dmg: 25, again: 0.5 } },
+    'elite-goblin': { name: 'Goblin Chef', base: 'goblin', attacks: ['fan'], gap: [1.8, 2.8], bite: 18, words: ['CHOPPED!', 'SEASONED!'],
+      fan: { wind: 0.7, n: 5, spread: 0.55, speed: 250, dmg: 12 } },
+    'elite-troll': { name: 'Troll Stomper', base: 'troll', attacks: ['slam'], gap: [2, 3], bite: 20, words: ['STOMPED!', 'SQUISH!'],
+      slam: { wind: 1.0, r: 85, dmg: 22 } },
+  };
+
+  function spawnBoss() {
+    const p = S.player, a = Math.random() * Math.PI * 2, d = Math.max(W, H) * 0.55;
+    const boss = { type: 'hippie', big: 'hippie', boss: true, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d, hp: BOSS_HP, maxHp: BOSS_HP, r: 58,
+      speed: 70, dmg: 30, xp: 0, toughness: 1, flash: 0, phase: 0, kx: 0, ky: 0, state: 'walk', timer: 3, lastAttack: '' };
+    S.enemies.push(boss); S.boss = boss;
+    logEvent('boss-arrives', { level: p.level });
+    S.banner = { txt: '☮ A GIANT HIPPIE wanders in, and he has the munchies! ☮', life: 5, color: '#ff9de2' };
+    S.flash = { color: '#ff9de2', life: 0.5 };
+  }
+
+  function spawnElite() {
+    const p = S.player, keys = ['elite-boar', 'elite-goblin', 'elite-troll'], key = keys[Math.floor(Math.random() * keys.length)], cfg = BIG[key];
+    const def = ENEMIES[cfg.base], scale = hpScale(S.t), a = Math.random() * Math.PI * 2, d = Math.max(W, H) * 0.55;
+    S.enemies.push({ type: cfg.base, big: key, elite: true, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d, hp: ELITE_HP * scale, maxHp: ELITE_HP * scale,
+      toughness: xpScale(S.t), dmgMult: dmgScale(S.t), r: def.r * 1.7, speed: def.speed * 0.9, dmg: cfg.bite, xp: def.xp, flash: 0, phase: Math.random() * 6.28, kx: 0, ky: 0,
+      state: 'walk', timer: rand(1.5, 2.5), lastAttack: '' });
+    S.banner = { txt: `⚔ An elite ${cfg.name} appears! ⚔`, life: 3.5, color: '#ffd84a' };
+    logEvent('elite-arrives', { elite: cfg.name });
+  }
+
+  function startAttack(b, kind) {
+    const p = S.player, cfg = BIG[b.big][kind], dx = p.x - b.x, dy = p.y - b.y, a = Math.atan2(dy, dx);
+    b.state = b.lastAttack = kind; b.leaping = 0; b.dashing = false;
+    if (kind === 'slam') { b.timer = cfg.wind; b.target = { x: p.x, y: p.y, r: cfg.r }; }
+    if (kind === 'ring') { b.timer = cfg.dur; b.waves = 0; b.waveT = 0.35; }
+    if (kind === 'dash') { b.timer = cfg.wind; b.dashDir = { x: Math.cos(a), y: Math.sin(a) }; b.dashLen = cfg.len; }
+    if (kind === 'fan') { b.timer = cfg.wind; b.aim = a; }
+  }
+  const endAttack = b => { b.state = 'walk'; b.timer = rand(...BIG[b.big].gap); b.target = null; };
+
+  // Returns true if this big enemy killed the player
+  function updateBig(b, dt) {
+    const p = S.player, cfg = BIG[b.big], dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;
+    b.kx = b.ky = 0; b.rooted = 0; // too big to knock back or root
+    b.timer -= dt;
+    if (b.state === 'walk') {
+      const spd = b.speed * (b.slow > 0 ? 0.6 : 1);
+      if (d > b.r + p.r - 6) { b.x += dx / d * spd * dt; b.y += dy / d * spd * dt; }
+      if (b.timer <= 0) {
+        const options = cfg.attacks.length > 1 ? cfg.attacks.filter(o => o !== b.lastAttack) : cfg.attacks;
+        startAttack(b, options[Math.floor(Math.random() * options.length)]);
+      }
+    } else if (b.state === 'slam') {
+      const c = cfg.slam;
+      if (b.timer <= 0 && !b.leaping) { b.leaping = 0.4; b.from = { x: b.x, y: b.y }; }
+      if (b.leaping) {
+        b.leaping -= dt;
+        const k = 1 - Math.max(0, b.leaping) / 0.4;
+        b.x = b.from.x + (b.target.x - b.from.x) * k; b.y = b.from.y + (b.target.y - b.from.y) * k;
+        b.hop = Math.sin(k * Math.PI) * (b.boss ? 120 : 80);
+        if (b.leaping <= 0) {
+          b.leaping = 0; b.hop = 0;
+          S.shockwaves.push({ x: b.x, y: b.y, r: 0, max: c.r * 1.3, life: 0.5, color: b.boss ? '#ff9de2' : '#ffd84a' }, { x: b.x, y: b.y, r: -20, max: c.r, life: 0.5, color: '#fff' });
+          const hit = dist2(p, b.target) < (b.target.r + p.r) ** 2;
+          endAttack(b);
+          if (hit && hurtPlayer(c.dmg * (b.dmgMult || 1), cfg.words, b.big + ' slam') === 'dead') return true;
+        }
+      }
+    } else if (b.state === 'ring') {
+      const c = cfg.ring;
+      if ((b.waveT -= dt) <= 0 && b.waves < c.waves) {
+        const off = b.waves * (Math.PI / c.n);
+        for (let i = 0; i < c.n; i++) {
+          const a = off + (i / c.n) * Math.PI * 2;
+          S.hazards.push({ kind: 'peace', src: b.big + ' ring', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 10, dmg: c.dmg * (b.dmgMult || 1), life: 6, hue: (i * 26 + b.waves * 40) % 360, words: cfg.words });
+        }
+        b.waves++; b.waveT = c.every;
+      }
+      if (b.timer <= 0) endAttack(b);
+    } else if (b.state === 'fan') {
+      const c = cfg.fan;
+      if (b.timer <= 0) {
+        for (let i = 0; i < c.n; i++) {
+          const a = b.aim + (i - (c.n - 1) / 2) * (c.spread / ((c.n - 1) / 2));
+          S.hazards.push({ kind: 'cleaver', src: b.big + ' fan', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 9, dmg: c.dmg * (b.dmgMult || 1), life: 4, spin: Math.random() * 6, words: cfg.words });
+        }
+        endAttack(b);
+      }
+    } else if (b.state === 'dash') {
+      const c = cfg.dash;
+      if (b.timer <= 0) {
+        if (!b.dashing) { b.dashing = true; b.dashLeft = b.dashLen; b.dashHit = false; }
+        const step = Math.min(b.dashLeft, c.speed * dt);
+        b.x += b.dashDir.x * step; b.y += b.dashDir.y * step; b.dashLeft -= step;
+        if (!b.dashHit && dist2(p, b) < (b.r + p.r) ** 2) { b.dashHit = true; if (hurtPlayer(c.dmg * (b.dmgMult || 1), cfg.words, b.big + ' dash') === 'dead') return true; }
+        if (b.dashLeft <= 0) {
+          b.dashing = false;
+          if (c.again && Math.random() < c.again && !b.chained) { b.chained = true; startAttack(b, 'dash'); } // the Tusker sometimes charges twice
+          else { b.chained = false; endAttack(b); }
+        }
+      }
+    }
+    b.face = dx >= 0 ? 1 : -1;
+    // Bite when touching it outside of attacks
+    if (b.state === 'walk' && p.hurt <= 0 && d < b.r + p.r && hurtPlayer(cfg.bite * (b.dmgMult || 1), cfg.words, b.big + ' bite') === 'dead') return true;
+    return false;
+  }
+
+  // Boss and elite projectiles; returns true if they killed the player
+  function updateHazards(dt) {
+    const p = S.player;
+    for (const h of S.hazards) {
+      h.x += h.vx * dt; h.y += h.vy * dt; h.life -= dt;
+      if (h.spin != null) h.spin += dt * 14;
+      if (p.hurt <= 0 && dist2(h, p) < (h.r + p.r - 3) ** 2) { h.life = 0; if (hurtPlayer(h.dmg, h.words, h.src || 'projectile') === 'dead') return true; }
+    }
+    S.hazards = S.hazards.filter(h => h.life > 0);
+    return false;
+  }
+
+  function bossDefeated(b) {
+    logEvent('boss-defeated', { fightSec: Math.round(S.t - BOSS_AT), level: S.player.level });
+    S.boss = null; S.bossDefeated = true;
+    S.banner = { txt: '☮ You out-foraged the Giant Hippie! Peace restored. ☮', life: 6, color: '#ffd84a' };
+    S.bigText = { txt: 'BOSS DEFEATED!', life: 2.5, color: '#ffd84a' };
+    S.flash = { color: '#ffd84a', life: 0.7 }; S.slowmo = 1.2;
+    S.hazards = [];
+    for (let i = 0; i < 40; i++) { const a = Math.random() * 6.28, r = rand(20, 140); S.gems.push({ x: b.x + Math.cos(a) * r, y: b.y + Math.sin(a) * r, v: 5 * 9 * XP_GAIN, big: true, tier: 'gold' }); }
+    dropCrystal(b.x - 20, b.y, 'purple'); dropCrystal(b.x + 20, b.y, 'red');
+    for (let i = 0; i < 3; i++) S.shockwaves.push({ x: b.x, y: b.y, r: -i * 40, max: 260, life: 1, color: i === 1 ? '#fff' : '#ff9de2' });
+  }
+
+  function eliteDefeated(e) {
+    logEvent('elite-defeated', { elite: BIG[e.big].name });
+    S.kills++;
+    S.banner = { txt: `⚔ ${BIG[e.big].name} defeated! ⚔`, life: 2.5, color: '#ffd84a' };
+    for (let i = 0; i < 12; i++) { const a = Math.random() * 6.28, r = rand(10, 70); S.gems.push({ x: e.x + Math.cos(a) * r, y: e.y + Math.sin(a) * r, v: 2 * e.xp * e.toughness * XP_GAIN, big: true, tier: 'pink' }); }
+    dropCrystal(e.x, e.y, Math.random() < 0.5 ? 'blue' : 'green'); S.cycleDrops--; // elite crystals don't count against the shop budget
+    S.shockwaves.push({ x: e.x, y: e.y, r: 0, max: 120, life: 0.6, color: '#ffd84a' });
+    for (let i = 0; i < 20; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-220, 220), vy: rand(-220, 220), life: 0.6, color: i % 2 ? '#ffd84a' : ENEMIES[e.type].color });
+  }
+
+  // ---------- Level up ----------
+  // XP needed to go from level L to L + 1: the first five levels are hand-set, then the cost grows a little faster each
+  // level (XP_CURVE), so strong runs slow down while enemy XP growth keeps weaker runs moving. Tuned so a typical run
+  // with no XP buffs reaches about level 45 at 20 minutes.
+  const XP_CURVE = 0.6;
+  const XP_LATE_FROM = 18, XP_LATE = 0.4; // extra cost per level past 18, growing each level, to slow mid-late game
+  const XP_GAIN = 0.85; // all spores give 15% less XP than their base value
+  const xpToNext = L => (L <= 5 ? [5, 10, 17, 26, 37][L - 1]
+    : Math.round(37 + 4 * (L - 5) + XP_CURVE * (L - 5) ** 2 + XP_LATE * Math.max(0, L - XP_LATE_FROM) ** 2));
+  const menuOpen = () => ['levelup', 'shop', 'augshop', 'testPanel'].some(id => !document.getElementById(id).classList.contains('hidden'));
+
+  // Adds one level to a skill; returns the modifier tier it just unlocked, or -1
+  function gainLevel(u) {
+    const p = S.player;
+    u.apply(p); p.upgrades[u.id] = (p.upgrades[u.id] || 0) + 1;
+    const tier = MOD_TREES[u.id] ? modTierFor(p.upgrades[u.id]) : -1;
+    return tier >= 0 && (p.mods[u.id] || []).length === tier ? tier : -1;
+  }
+  function resumeGame() {
+    const p = S.player;
+    document.getElementById('levelup').classList.add('hidden');
+    S.paused = false;
+    if (S.pendingForage.length) return showForageChoice(S.pendingForage.shift());
+    if (p.xp >= p.xpNext) levelUp();
+  }
+
+  function levelUp() {
+    const p = S.player;
+    p.level++; p.xp -= p.xpNext; p.xpNext = xpToNext(p.level);
+    if (S.log) S.log.levelTimes.push(Math.round(S.t));
+    // Every level-up heals 5% of max HP
+    const healed = Math.min(p.maxHp - p.hp, p.maxHp * (aug('regen', 'lifeleaf') ? 0.15 : 0.05));
+    if (healed > 0) { p.hp += healed; S.texts.push({ x: p.x, y: p.y - 40, txt: `+${Math.round(healed)} HP`, life: 1, color: '#7be36b' }); }
+    if (p.level % 10 === 0) spawnMerchant();
+    S.paused = true;
+    document.getElementById('levelTitle').textContent = 'Level up! Choose a blessing';
+    const pool = UPGRADES.filter(u => (p.upgrades[u.id] || 0) < u.max && canLearn(u));
+    document.getElementById('slotInfo').textContent = slotSummary();
+    const picks = [];
+    while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    const cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    if (!picks.length) { p.hp = p.maxHp; S.paused = false; return; }
+    for (const u of picks) {
+      const lvl = p.upgrades[u.id] || 0;
+      const div = document.createElement('div');
+      div.className = 'card';
+      const tier = MOD_TREES[u.id] ? modTierFor(lvl + 1) : -1, modNext = tier >= 0;
+      div.innerHTML = `<b>${u.name}</b><span>${u.desc}</span><small>${lvl === 0 && p.w[u.id] ? 'NEW!' : 'Level ' + (lvl + 1)}${u.info ? ' — ' + u.info(p) : ''}</small>${modNext ? '<small style="color:#c9a8ff">✦ Unlocks a skill modifier choice</small>' : ''}`;
+      div.onclick = () => {
+        const t = gainLevel(u);
+        logEvent('pick', { skill: u.id, level: p.upgrades[u.id] });
+        if (t >= 0) showModifierChoice(u.id, t, resumeGame); else resumeGame();
+      };
+      cards.appendChild(div);
+    }
+    document.getElementById('levelup').classList.remove('hidden');
+  }
+  // Shown right after a skill reaches level 5, 10 or 15: pick one of that tier's two modifiers, then onDone()
+  function showModifierChoice(k, tier, onDone) {
+    const p = S.player;
+    document.getElementById('slotInfo').textContent = '';
+    document.getElementById('levelTitle').textContent = `${SKILL_NAMES[k]} reached level ${p.w[k].level}! Choose a modifier`;
+    const cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    for (const code of modOptions(p, k)) {
+      const m = MOD_TREES[k][code];
+      const div = document.createElement('div');
+      div.className = 'card mod';
+      div.innerHTML = `<b>${m.name}</b><span>${m.desc}</span><small>Permanent modifier for ${SKILL_NAMES[k]}</small>`;
+      div.onclick = () => {
+        (p.mods[k] = p.mods[k] || []).push(code);
+        logEvent('modifier', { skill: k, name: m.name, skillLevel: p.w[k].level });
+        document.getElementById('levelup').classList.add('hidden');
+        onDone();
+      };
+      cards.appendChild(div);
+    }
+    document.getElementById('levelup').classList.remove('hidden');
+  }
+
+  // ---------- Crystals & merchant ----------
+  const CRYSTALS = {
+    blue:   { color: '#4da6ff', use: 'level up an active skill (costs the new level number in crystals)' },
+    green:  { color: '#5ee07a', use: 'level up a passive skill (costs the new level number in crystals)' },
+    red:    { color: '#ff4d5e', use: 'rare. Unlocks extra passive skill slots' },
+    purple: { color: '#b36bff', use: 'rare. Unlocks extra active skill slots' },
+  };
+  const MERCHANT = 'Old Toadley';
+
+  // Each shop cycle (10 player levels) has a budget of common crystals: 8 before the first shop, +1 per shop after,
+  // scaled by Geode Sense. Under budget, drops are unchanged; past it they drop to a 5% trickle until the next shop.
+  function crystalBudgetMult() {
+    const budget = (8 + S.shopCycle) * S.player.crystalLuck, n = S.cycleDrops;
+    return n < budget ? 1 : 0.05;
+  }
+
+  function dropCrystal(x, y, kind) {
+    const rare = kind === 'red' || kind === 'purple';
+    if (!rare) S.cycleDrops++;
+    S.crystals.push({ x, y, kind, bob: Math.random() * 6, rare });
+    if (rare) {
+      S.banner = { txt: `✦ A rare ${kind} crystal dropped! ✦`, life: 4, color: CRYSTALS[kind].color };
+      S.shockwaves.push({ x, y, r: 0, max: 120, life: 0.8, color: CRYSTALS[kind].color });
+    }
+  }
+
+  // Big moment for picking up a red or purple crystal: slow motion, screen flash, shockwaves, sparkle burst, giant text
+  function rareCelebration(kind, col) {
+    const p = S.player;
+    S.slowmo = 1.2;
+    S.flash = { color: col, life: 0.7 };
+    S.bigText = { txt: `RARE ${kind.toUpperCase()} CRYSTAL!`, life: 2.5, color: col };
+    for (let i = 0; i < 3; i++) S.shockwaves.push({ x: p.x, y: p.y, r: -i * 40, max: 260, life: 0.9 + i * 0.15, color: i === 1 ? '#fff' : col });
+    for (let i = 0; i < 60; i++) {
+      const a = Math.random() * Math.PI * 2, sp = rand(80, 380);
+      S.particles.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.5, 1.1), color: i % 3 ? col : '#fff' });
+    }
+  }
+
+  // The merchant waits until you visit; if one is still waiting at the next 10 levels, that one stays
+  function spawnMerchant() {
+    S.shopCycle++; S.cycleDrops = 0;
+    if (S.merchant) { S.banner = { txt: `🐸 ${MERCHANT} is still waiting for you. Follow the arrow!`, life: 4 }; if (!S.auntie) placeAuntie(); return; }
+    const p = S.player, a = Math.random() * Math.PI * 2;
+    S.merchant = { x: p.x + Math.cos(a) * 280, y: p.y + Math.sin(a) * 280 };
+    logEvent('merchant-arrives', { level: p.level });
+    S.banner = { txt: `🐸 ${MERCHANT} the crystal merchant has arrived! Follow the arrow. He'll wait for you.`, life: 5 };
+    placeAuntie();
+  }
+
+  function openShop(msg = '') {
+    S.paused = true;
+    renderShop(msg);
+    document.getElementById('shop').classList.remove('hidden');
+  }
+  function closeShop() {
+    document.getElementById('shop').classList.add('hidden');
+    S.merchant = null;
+    S.banner = { txt: `${MERCHANT} hops away. See you in 10 levels!`, life: 3 };
+    resumeGame();
+  }
+
+  // Shop tooltips: what a skill does, what its next level gives, its modifiers so far and when the next one unlocks.
+  // Tap or click a skill name to pin it open (works on phones); with a mouse, hovering shows it too.
+  const shopTips = new Set();
+  function skillTip(u) {
+    const p = S.player, lvl = p.upgrades[u.id] || 0, lines = [u.desc];
+    if (!canLearn(u)) lines.push(`<b>Needs a free ${u.type} skill slot.</b>`);
+    if (lvl < u.max && u.info) lines.push(`<b>Next level:</b> ${u.info(p)}`);
+    const picked = (p.mods[u.id] || []).map(c => MOD_TREES[u.id][c].name);
+    if (picked.length) lines.push(`<b>Modifiers:</b> ${picked.join(', ')}`);
+    if (MOD_TREES[u.id] && lvl < u.max) lines.push(`<b>Next modifier choice:</b> level ${Math.floor(lvl / 5) * 5 + 5}`);
+    return lines.join('<br>');
+  }
+
+  function renderShop(msg) {
+    const p = S.player, c = p.crystals;
+    const gem = k => `<span style="color:${CRYSTALS[k].color}">◆</span>`;
+    const btn = (kind, act, id, disabled, label, title) =>
+      `<button class="cbtn" style="--c:${CRYSTALS[kind].color}" data-act="${act}" data-id="${id}" data-kind="${kind}" title="${title}" ${disabled ? 'disabled' : ''}>${label}</button>`;
+    const slotRow = type => {
+      const price = nextSlotPrice(type), kind = SLOT_COST[type].kind, have = p.slots[type];
+      return `<div class="sitem"><div class="srow"><div class="sname static">${type === 'active' ? 'Active' : 'Passive'} skill slots<small>${slotsUsed(type)} of ${have} used${price ? '' : ' · all unlocked'}</small></div><div class="sbtns">
+        ${price ? btn(kind, 'slot', type, c[kind] < price, `Unlock #${have + 1} · ${price}◆`, `Spend ${price} ${kind} crystals: +1 ${type} skill slot`) : ''}
+      </div></div></div>`;
+    };
+    const row = u => {
+      const lvl = p.upgrades[u.id] || 0, maxed = lvl >= u.max, lk = u.type === 'active' ? 'blue' : 'green', noSlot = !canLearn(u);
+      return `<div class="sitem${shopTips.has(u.id) ? ' open' : ''}"><div class="srow"><button type="button" class="sname" data-tip="${u.id}" aria-expanded="${shopTips.has(u.id)}">${u.name} <span class="ihint" aria-hidden="true">ⓘ</span><small>${lvl === 0 ? 'Not learned' : `Lv ${lvl} / ${u.max}`}${maxed ? ' · MAX' : ''}</small></button><div class="sbtns">
+        ${noSlot ? btn(lk, 'up', u.id, true, 'No slot', `All your ${u.type} skill slots are full. Unlock another slot above.`)
+          : btn(lk, 'up', u.id, maxed || c[lk] < lvl + 1, maxed ? '+1' : `+1 · ${lvl + 1}◆`, `Spend ${lvl + 1} ${lk} crystals: +1 level`)}
+      </div></div><div class="stip">${skillTip(u)}</div></div>`;
+    };
+    document.getElementById('shopBody').innerHTML = `
+      <div class="wallet">${Object.keys(CRYSTALS).map(k => `<span>${gem(k)} ${c[k]}</span>`).join('')}</div>
+      <div class="legend">${Object.keys(CRYSTALS).map(k => `${gem(k)} ${k[0].toUpperCase() + k.slice(1)}: ${CRYSTALS[k].use}`).join('<br>')}</div>
+      <div class="shopmsg">${msg}</div>
+      <div class="ssec">Skill slots</div>${['active', 'passive'].map(slotRow).join('')}
+
+      <div class="ssec">Active skills</div>${UPGRADES.filter(u => u.type === 'active').map(row).join('')}
+      <div class="ssec">Passive skills</div>${UPGRADES.filter(u => u.type === 'passive').map(row).join('')}`;
+  }
+
+  function shopAction(act, id, kind) {
+    const p = S.player;
+    if (act === 'slot') { // id is 'active' or 'passive'
+      logEvent('shop-buy', { slot: id, cost: nextSlotPrice(id), crystal: kind });
+      p.crystals[kind] -= nextSlotPrice(id); p.slots[id]++;
+      return renderShop(`Unlocked ${id} skill slot #${p.slots[id]}!`);
+    }
+    const u = UPGRADES.find(x => x.id === id), targets = [u];
+    // Blue (active) and green (passive) crystals cost the level being bought: 5 -> 6 costs 6
+    logEvent('shop-buy', { skill: id, toLevel: (p.upgrades[id] || 0) + 1, cost: (p.upgrades[id] || 0) + 1, crystal: kind });
+    p.crystals[kind] -= (p.upgrades[id] || 0) + 1;
+    const msg = targets.map(t => `${t.name} → level ${(p.upgrades[t.id] || 0) + 1}`).join(' & ') + '!';
+    // Apply each level; any that reaches 5/10/15 opens its modifier choice before returning to the shop
+    const pending = targets.map(u => [u.id, gainLevel(u)]).filter(([, t]) => t >= 0);
+    const next = () => {
+      if (!pending.length) return openShop(msg);
+      const [k, t] = pending.shift();
+      document.getElementById('shop').classList.add('hidden');
+      showModifierChoice(k, t, next);
+    };
+    next();
+  }
+  document.getElementById('shopBody').addEventListener('click', e => {
+    const tip = e.target.closest('[data-tip]');
+    if (tip) {
+      const id = tip.dataset.tip, item = tip.closest('.sitem');
+      shopTips.has(id) ? shopTips.delete(id) : shopTips.add(id);
+      item.classList.toggle('open', shopTips.has(id)); tip.setAttribute('aria-expanded', shopTips.has(id));
+      return;
+    }
+    const b = e.target.closest('button[data-act]');
+    if (b && !b.disabled) shopAction(b.dataset.act, b.dataset.id, b.dataset.kind);
+  });
+  document.getElementById('shopClose').onclick = closeShop;
+
+  // ---------- Augments: Auntie Amanita ----------
+  // Once any skill reaches level 15, Auntie Amanita appears near Old Toadley every time he does. She sells three augments
+  // for each maxed skill, in any order; each costs 20, 40, then 60 crystals (blue for active skills, green for passives).
+  const AUG_COST = [20, 40, 60];
+  const AUNTIE = 'Auntie Amanita';
+  const AUGMENTS = {
+    bolt: [{ id: 'dense', name: 'Dense Spores', desc: '+40% Spore Shot damage.' },
+      { id: 'overgrowth', name: 'Overgrowth', desc: '+2 spore shots per volley.' },
+      { id: 'longshot', name: 'Long Shot', desc: 'Shots fly 50% faster and farther, and pierce 2 more enemies.' }],
+    orbit: [{ id: 'hardy', name: 'Hardy Buddies', desc: '+40% Mushroom Buddies damage.' },
+      { id: 'crowd', name: 'Buddy Crowd', desc: '+2 mushroom buddies.' },
+      { id: 'wideorbit', name: 'Wide Orbit', desc: 'Buddies circle 30% farther out.' }],
+    aura: [{ id: 'potent', name: 'Potent Puff', desc: '+40% Puffball Cloud damage.' },
+      { id: 'billow', name: 'Billowing', desc: 'The cloud is 30% bigger.' },
+      { id: 'quickpuff', name: 'Quick Puffs', desc: 'The cloud damages 40% more often.' }],
+    tendril: [{ id: 'thickhyphae', name: 'Thick Hyphae', desc: '+40% Mycelium Tendrils damage.' },
+      { id: 'farreach', name: 'Far Reach', desc: 'Tendrils reach 50% farther, for the first strike and every branch.' },
+      { id: 'network', name: 'Spreading Network', desc: '+1 branch and a 50% higher hit cap.' }],
+    thorn: [{ id: 'sharp', name: 'Sharper Thorns', desc: '+40% Thorn Nova damage.' },
+      { id: 'storm', name: 'Thorn Storm', desc: '+12 thorns per burst.' },
+      { id: 'quickbloom', name: 'Quick Bloom', desc: 'Bursts 30% more often.' }],
+    clone: [{ id: 'strongspawn', name: 'Strong Spawn', desc: 'Clones are 25% stronger, and clone explosions deal 40% more.' },
+      { id: 'kin', name: 'Kinship', desc: '+1 attacking clone. With Transplant Trauma, explosions cover 50% more area instead.' },
+      { id: 'haste', name: 'Hasty Spores', desc: 'Clones act 25% faster; exploding clones go off and regrow 25% sooner.' }],
+    hp: [{ id: 'heartwood', name: 'Heartwood', desc: '+60 max HP.', apply: p => { p.maxHp += 60; p.hp += 60; } },
+      { id: 'bark', name: 'Bark Skin', desc: 'Take 10% less damage from everything.' },
+      { id: 'sap', name: 'Sap Flow', desc: 'Regenerate 1 HP per second.', apply: p => { p.regen += 1; } }],
+    speed: [{ id: 'windspore', name: 'Wind Spores', desc: '+12% movement speed.', apply: p => { p.speed *= 1.12; } },
+      { id: 'fleetstem', name: 'Fleet Stem', desc: '+12% movement speed.', apply: p => { p.speed *= 1.12; } },
+      { id: 'slippery', name: 'Slippery', desc: 'After taking a hit, stay untouchable 0.4 seconds longer.' }],
+    might: [{ id: 'venomgills', name: 'Venom Gills', desc: '+20% damage for all attacks.', apply: p => { p.might *= 1.2; } },
+      { id: 'deadlygills', name: 'Deadly Gills', desc: '+20% damage for all attacks.', apply: p => { p.might *= 1.2; } },
+      { id: 'toxicburst', name: 'Toxic Burst', desc: 'Every hit has a 10% chance to deal double damage.' }],
+    magnet: [{ id: 'widenet', name: 'Wide Net', desc: '+50% pickup range.', apply: p => { p.magnet *= 1.5; } },
+      { id: 'vastnet', name: 'Vast Net', desc: '+50% pickup range.', apply: p => { p.magnet *= 1.5; } },
+      { id: 'sporesift', name: 'Spore Sifter', desc: '+10% XP from spores.', apply: p => { p.xpMult += 0.1; } }],
+    regen: [{ id: 'deepmoss', name: 'Deep Moss', desc: 'Regenerate 1 more HP per second.', apply: p => { p.regen += 1; } },
+      { id: 'ancientmoss', name: 'Ancient Moss', desc: 'Regenerate 1.5 more HP per second.', apply: p => { p.regen += 1.5; } },
+      { id: 'lifeleaf', name: 'Life Leaf', desc: 'Level-ups heal 15% of max HP instead of 5%.' }],
+    xpgain: [{ id: 'feast', name: 'Hyphal Feast', desc: '+15% XP.', apply: p => { p.xpMult += 0.15; } },
+      { id: 'deepfeast', name: 'Deep Feast', desc: '+15% XP.', apply: p => { p.xpMult += 0.15; } },
+      { id: 'goldspores', name: 'Golden Spores', desc: 'Pink and golden spores appear 50% more often.' }],
+    crystalluck: [{ id: 'geodeheart', name: 'Geode Heart', desc: '+20% crystal drops, including the shop budget.', apply: p => { p.crystalLuck += 0.2; } },
+      { id: 'geodecore', name: 'Geode Core', desc: '+20% crystal drops, including the shop budget.', apply: p => { p.crystalLuck += 0.2; } },
+      { id: 'raregeode', name: 'Rare Geode', desc: 'Trolls are twice as likely to drop red and purple crystals.' }],
+  };
+  // Augments always come from the player, so clones use them too
+  const aug = (k, id) => (S.player.aug[k] || []).includes(id);
+  const maxedSkills = () => UPGRADES.filter(u => (S.player.upgrades[u.id] || 0) >= u.max && AUGMENTS[u.id]);
+  const auntieUnlocked = () => UPGRADES.some(u => (S.player.upgrades[u.id] || 0) >= 15);
+
+  function placeAuntie() {
+    if (!S.merchant || !auntieUnlocked()) return;
+    const a = Math.random() * Math.PI * 2, d = rand(150, 210);
+    const isNew = !S.auntie;
+    S.auntie = { x: S.merchant.x + Math.cos(a) * d, y: S.merchant.y + Math.sin(a) * d };
+    if (isNew) { logEvent('auntie-arrives', { level: S.player.level }); S.banner = { txt: `🐸 ${MERCHANT} is here, and ✨ ${AUNTIE} came along to augment your maxed skills! Follow the arrows.`, life: 6, color: '#d9a6ff' }; }
+  }
+
+  function openAugShop(msg = '') {
+    S.paused = true;
+    renderAugShop(msg);
+    document.getElementById('augshop').classList.remove('hidden');
+  }
+  function closeAugShop() {
+    document.getElementById('augshop').classList.add('hidden');
+    S.auntie = null;
+    S.banner = { txt: `${AUNTIE} drifts off. She'll be back with Old Toadley.`, life: 3, color: '#d9a6ff' };
+    resumeGame();
+  }
+  function renderAugShop(msg) {
+    const p = S.player, c = p.crystals;
+    const gem = k => `<span style="color:${CRYSTALS[k].color}">◆</span>`;
+    const rows = maxedSkills().map(u => {
+      const owned = p.aug[u.id] || [], kind = u.type === 'active' ? 'blue' : 'green', price = AUG_COST[owned.length];
+      return `<div class="ssec">${u.name} <small class="augcount">${owned.length}/3 augments</small></div>` + AUGMENTS[u.id].map(a => {
+        const has = owned.includes(a.id);
+        return `<div class="sitem"><div class="srow"><div class="sname static">${a.name}<small>${a.desc}</small></div><div class="sbtns">${has
+          ? '<span class="augowned">✓ Owned</span>'
+          : `<button class="cbtn" style="--c:${CRYSTALS[kind].color}" data-aug="${u.id}:${a.id}" ${c[kind] < price ? 'disabled' : ''}>${price}◆</button>`}</div></div></div>`;
+      }).join('');
+    }).join('');
+    document.getElementById('augBody').innerHTML = `
+      <div class="wallet"><span>${gem('blue')} ${c.blue}</span><span>${gem('green')} ${c.green}</span></div>
+      <div class="legend">Augments for your maxed skills. Each skill takes three, in any order: the 1st costs 20, the 2nd 40 and the 3rd 60 crystals (${gem('blue')} blue for active skills, ${gem('green')} green for passives).</div>
+      <div class="shopmsg">${msg}</div>
+      ${rows || '<p class="legend">Max out a skill and I&#39;ll have something for it, dearie.</p>'}`;
+  }
+  function buyAugment(k, id) {
+    const p = S.player, u = UPGRADES.find(x => x.id === k), a = AUGMENTS[k].find(x => x.id === id);
+    const owned = (p.aug[k] = p.aug[k] || []), kind = u.type === 'active' ? 'blue' : 'green', price = AUG_COST[owned.length];
+    if (owned.includes(id) || p.crystals[kind] < price) return;
+    p.crystals[kind] -= price; owned.push(id);
+    if (a.apply) a.apply(p);
+    logEvent('augment', { skill: k, name: a.name, cost: price, crystal: kind });
+    renderAugShop(`${u.name}: ${a.name}!`);
+  }
+  document.getElementById('augBody').addEventListener('click', e => {
+    const b = e.target.closest('button[data-aug]');
+    if (b && !b.disabled) { const [k, id] = b.dataset.aug.split(':'); buyAugment(k, id); }
+  });
+  document.getElementById('augClose').onclick = closeAugShop;
+
+  function drawAuntie(m) {
+    ctx.save(); ctx.translate(m.x, m.y);
+    const sway = Math.sin(S.t * 2) * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 22, 18, 5, 0, 0, 7); ctx.fill();
+    ctx.translate(0, sway * 0.5);
+    // long stem body wrapped in a shawl
+    ctx.fillStyle = '#efe3c8'; ctx.beginPath(); ctx.moveTo(-10, 22); ctx.quadraticCurveTo(-13, 0, -8, -12); ctx.lineTo(8, -12); ctx.quadraticCurveTo(13, 0, 10, 22); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#6b3fa0'; ctx.beginPath(); ctx.moveTo(-13, -4); ctx.lineTo(13, -4); ctx.lineTo(9, 10); ctx.lineTo(-9, 10); ctx.closePath(); ctx.fill();
+    // face
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(-3, -7, 1.3, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(3, -7, 1.3, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(0, -4, 2, 0.2, Math.PI - 0.2); ctx.stroke();
+    // tall pointed purple cap with gold spots
+    ctx.fillStyle = '#8a4fd1'; ctx.beginPath(); ctx.moveTo(-20, -12); ctx.quadraticCurveTo(-8, -18, 2, -44 + sway); ctx.quadraticCurveTo(10, -18, 20, -12); ctx.quadraticCurveTo(0, -8, -20, -12); ctx.fill();
+    ctx.fillStyle = '#ffd84a'; for (const [sx, sy] of [[-9, -16], [4, -24], [9, -15], [-2, -31]]) { ctx.beginPath(); ctx.arc(sx, sy, 2, 0, 7); ctx.fill(); }
+    // staff with a glowing orb
+    ctx.strokeStyle = '#7a5230'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(16, 22); ctx.lineTo(18, -18); ctx.stroke();
+    ctx.fillStyle = 'rgba(217, 166, 255, 0.35)'; ctx.beginPath(); ctx.arc(18, -22, 9, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e6c8ff'; ctx.beginPath(); ctx.arc(18, -22, 4.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e6c8ff'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('AUGMENTS', 0, -52 - Math.sin(S.t * 4) * 2);
+    ctx.restore();
+  }
+
+
+  // Bolt starts at level 1 already
+  function initUpgradeCounts() { S.player.upgrades.bolt = 1; }
+
+  function togglePause() {
+    if (!S || !S.running || menuOpen()) return;
+    S.paused = !S.paused;
+  }
+
+  // ---------- Update ----------
+  function update(dt) {
+    const p = S.player;
+    S.t += dt;
+
+    // Movement
+    const dir = inputDir();
+    const spd = p.speed * (p.speedBoost > 0 ? 1.6 : 1);
+    p.x += dir.x * spd * dt; p.y += dir.y * spd * dt;
+    if (dir.x) p.face = Math.sign(dir.x);
+    p.moving = dir.x || dir.y;
+    p.speedBoost = Math.max(0, p.speedBoost - dt);
+    p.hurt = Math.max(0, p.hurt - dt);
+    p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
+
+    // Spawning: rate ramps up over time
+    if (S.log && S.t >= S.logNextMinute) { S.log.perMinute.push(logSnapshot()); S.logNextMinute += 60; saveRunLog(); }
+    if (S.t >= BOSS_AT && !S.boss && !S.bossDefeated) spawnBoss();
+    if (S.t >= S.eliteAt) { // elites: about every 60-90 s from 10:00, more often later; at most 2, none during the boss fight
+      if (!S.boss && S.enemies.filter(e => e.elite).length < 2) spawnElite();
+      S.eliteAt = S.t + rand(60, 90) * Math.max(0.5, 1 - (S.t - ELITE_FROM) / 1200);
+    }
+    const rate = (0.8 + S.t / 25) * (S.boss ? 0.35 : 1);
+    S.spawnAcc += rate * dt;
+    while (S.spawnAcc >= 1 && S.enemies.length < 400) { S.spawnAcc--; spawnEnemy(); }
+    for (const t in SHROOM_TYPES) {
+      if ((S.shroomTimers[t] -= dt * forageFreq(t)) <= 0) { S.shroomTimers[t] = rand(...SHROOM_TYPES[t].interval); spawnShroom(t); }
+    }
+
+    updateWeapons(p, dt);
+    updateClones(dt);
+
+    // Enemies
+    for (const e of S.enemies) {
+      const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
+      let sx = dx / d, sy = dy / d;
+      if (e.type === 'bat' || e.type === 'pixie') { e.phase += dt * 6; sx += Math.cos(e.phase) * 0.5; sy += Math.sin(e.phase) * 0.5; }
+      const spd = e.rooted > 0 ? 0 : e.speed * (e.slow > 0 ? 0.5 : 1);
+      for (const k of ['slow', 'rooted', 'vuln', 'rot']) if (e[k] > 0) e[k] -= dt;
+      if (e.vulnT > 0 && (e.vulnT -= dt) <= 0) e.vulnStacks = 0;
+      if (e.concussT > 0 && (e.concussT -= dt) <= 0) e.concussStacks = 0;
+      if (e.poison > 0) { e.poison -= dt; e.hp -= e.poisonDps * dt; }
+      if (e.big) { e.flash = Math.max(0, e.flash - dt); if (updateBig(e, dt)) return gameOver(); continue; }
+      e.x += sx * spd * dt + e.kx * dt; e.y += sy * spd * dt + e.ky * dt;
+      e.kx *= 0.85; e.ky *= 0.85;
+      e.flash = Math.max(0, e.flash - dt);
+      if (d < e.r + p.r && p.hurt <= 0) {
+        const res = hurtPlayer(e.dmg, undefined, e.type);
+        if (res === 'dead') return gameOver();
+        if (res === 'hit' && hasMod(p, 'thorn', 'armor')) damageEnemy(e, (6 + p.w.thorn.level * 3) * p.might * 4, -dx / d * 300, -dy / d * 300);
+      }
+      // Despawn far-away enemies and respawn near
+      if (d > Math.max(W, H) * 1.5) { e.x = p.x - dx * 0.5; e.y = p.y - dy * 0.5; }
+    }
+    // Light separation so enemies don't stack completely
+    for (let i = 0; i < S.enemies.length; i++) {
+      const a = S.enemies[i];
+      for (let j = i + 1; j < Math.min(S.enemies.length, i + 12); j++) {
+        const b = S.enemies[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = a.r + b.r;
+        if (a.big || b.big) continue;
+        if (d > 0 && d < m) { const push = (m - d) / 2 / d; a.x -= dx * push; a.y -= dy * push; b.x += dx * push; b.y += dy * push; }
+      }
+    }
+
+    // Bullets
+    buildGrid();
+    const spawned = [];
+    for (const b of S.bullets) {
+      if (b.homing) { // Seeking Spores: steer toward the closest enemy
+        let best = null, bd = 250 * 250;
+        forNearby(b.x, b.y, 250, e => { const d = dist2(e, b); if (d < bd && !b.hit.has(e)) { bd = d; best = e; } });
+        if (best) {
+          const sp = Math.hypot(b.vx, b.vy), cur = Math.atan2(b.vy, b.vx), want = Math.atan2(best.y - b.y, best.x - b.x);
+          const diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur)), a = cur + Math.max(-5 * dt, Math.min(5 * dt, diff));
+          b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp;
+        }
+      }
+      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      forNearby(b.x, b.y, b.r + 64, e => {
+        if (b.pierce <= 0) return false;
+        if (b.hit.has(e)) return;
+        if (dist2(b, e) < (b.r + e.r) ** 2) {
+          let dmg = b.dmg;
+          if (b.concussive) { // Concussive Spores: per-enemy stacks, refreshed by every hit (even at the 12-stack cap)
+            dmg *= 1 + 0.05 * (e.concussStacks || 0);
+            e.concussStacks = Math.min(12, (e.concussStacks || 0) + 1); e.concussT = 5;
+          }
+          damageEnemy(e, dmg, b.vx * 0.3, b.vy * 0.3); b.hit.add(e); b.pierce--;
+          if (b.vulnerable) { e.vulnStacks = Math.min(3, (e.vulnStacks || 0) + 1); e.vulnT = 3; } // Vulnerable Spores
+          if (b.poison) { e.poison = 2; e.poisonDps = b.dmg * 0.4; }
+          if (b.burst) {
+            forNearby(e.x, e.y, 60, o => { if (o !== e && dist2(o, e) < 60 * 60) damageEnemy(o, b.dmg * 0.5); });
+            for (let i = 0; i < 6; i++) S.particles.push({ x: e.x, y: e.y, vx: rand(-150, 150), vy: rand(-150, 150), life: 0.3, color: '#d9a6ff' });
+          }
+        }
+      });
+      if (b.pierce <= 0) b.life = 0;
+      if (b.life <= 0 && b.splinter && S.bullets.length + spawned.length < BULLET_BUDGET) { // Splinters: shatter into 2 smaller thorns
+        const a = Math.atan2(b.vy, b.vx);
+        for (const off of [-0.6, 0.6]) spawned.push({ ...b, vx: Math.cos(a + off) * 260, vy: Math.sin(a + off) * 260, r: 3, dmg: b.dmg * 0.5, life: 0.5, pierce: 1, splinter: false, hit: new Set(), small: true });
+      }
+    }
+    S.bullets = S.bullets.filter(b => b.life > 0).concat(spawned);
+    for (const d of S.delayed) { d.t -= dt; if (d.t <= 0) d.fn(); }
+    S.delayed = S.delayed.filter(d => d.t > 0);
+
+    if (updateHazards(dt)) return gameOver();
+
+    // Deaths
+    S.enemies = S.enemies.filter(e => { if (e.hp <= 0) { if (e.boss) bossDefeated(e); else if (e.elite) eliteDefeated(e); else killEnemy(e); return false; } return true; });
+
+    // Gems
+    for (const g of S.gems) {
+      const d = Math.sqrt(dist2(g, p));
+      if (g.pull || d < p.magnet) {
+        const s = Math.max(250, 600 - d) * dt;
+        g.x += (p.x - g.x) / (d || 1) * s; g.y += (p.y - g.y) / (d || 1) * s;
+      }
+      if (d < p.r + 6) { g.taken = true; p.xp += g.v * p.xpMult * (1 + 0.25 * (g.vacuum || 0)); }
+    }
+    S.gems = S.gems.filter(g => !g.taken);
+    if (S.gems.length > 600) S.gems.splice(0, S.gems.length - 600);
+
+    // Crystals
+    for (const c of S.crystals) {
+      const d = Math.sqrt(dist2(c, p));
+      if (c.pull || d < p.magnet) { const s = Math.max(250, 600 - d) * dt; c.x += (p.x - c.x) / (d || 1) * s; c.y += (p.y - c.y) / (d || 1) * s; }
+      if (d < p.r + 8) {
+        c.taken = true; p.crystals[c.kind]++; if (S.log) S.log.crystalsGot[c.kind]++;
+        const col = CRYSTALS[c.kind].color;
+        if (c.rare) rareCelebration(c.kind, col);
+        else S.texts.push({ x: p.x, y: p.y - 34, txt: `+1 ${c.kind} crystal`, life: 1, color: col });
+      }
+    }
+    S.crystals = S.crystals.filter(c => !c.taken);
+
+    // Merchant
+    if (S.merchant) {
+      if (dist2(S.merchant, p) < (p.r + 24) ** 2) { logEvent('shop-visit', { crystals: { ...p.crystals } }); }
+      if (dist2(S.merchant, p) < (p.r + 24) ** 2) return openShop(`"Ribbit! Crystals for power, little mushroom?"`);
+    }
+    if (S.auntie && dist2(S.auntie, p) < (p.r + 24) ** 2) { logEvent('auntie-visit', { crystals: { blue: p.crystals.blue, green: p.crystals.green } }); return openAugShop(`"Ooh, a fully grown skill. Let's make it sing, dearie."`); }
+    if (S.banner && (S.banner.life -= dt) <= 0) S.banner = null;
+
+    // Magic mushrooms
+    for (const m of S.shrooms) {
+      m.life -= dt;
+      const lure = forageStacks(m.kind, 'lure');
+      if (lure) { const d = Math.sqrt(dist2(m, p)); if (d < 150 * lure && d > 1) { m.x += (p.x - m.x) / d * 220 * dt; m.y += (p.y - m.y) / d * 220 * dt; } }
+      if (dist2(m, p) < (p.r + 14) ** 2) { m.life = 0; collectShroom(m); }
+    }
+    S.shrooms = S.shrooms.filter(m => m.life > 0);
+    if (p.thickSkin > 0) p.thickSkin -= dt;
+    if (S.pendingForage.length) return showForageChoice(S.pendingForage.shift());
+
+    // FX
+    if (S.particles.length > MAX_PARTICLES) S.particles.splice(0, S.particles.length - MAX_PARTICLES);
+    for (const q of S.particles) { q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; }
+    S.particles = S.particles.filter(q => q.life > 0);
+    for (const w of S.shockwaves) { w.r += (w.max / 0.8) * dt; w.life -= dt; }
+    S.shockwaves = S.shockwaves.filter(w => w.life > 0 && w.r < w.max);
+    for (const td of S.tendrils) td.life -= dt;
+    S.tendrils = S.tendrils.filter(td => td.life > 0);
+    for (const t of S.texts) { t.y -= 30 * dt; t.life -= dt; }
+    S.texts = S.texts.filter(t => t.life > 0);
+
+    if (p.xp >= p.xpNext) levelUp();
+  }
+
+  function gameOver() {
+    S.running = false;
+    if (S.log) { S.log.status = 'died'; S.log.killedBy = S.lastHitBy || 'unknown'; S.log.perMinute.push(logSnapshot()); saveRunLog(); }
+    const m = Math.floor(S.t / 60), s = Math.floor(S.t % 60).toString().padStart(2, '0');
+    document.getElementById('finalStats').innerHTML = `Survived <b>${m}:${s}</b> · Level <b>${S.player.level}</b> · Defeated <b>${S.kills}</b> creatures`;
+    document.getElementById('gameover').classList.remove('hidden');
+  }
+
+  // ---------- Drawing ----------
+  function drawMushroom(x, y, s, cap, spots = '#fff') {
+    ctx.fillStyle = '#efe3c8';
+    ctx.fillRect(x - s * 0.25, y - s * 0.5, s * 0.5, s * 0.6);
+    ctx.fillStyle = cap;
+    ctx.beginPath(); ctx.ellipse(x, y - s * 0.5, s * 0.7, s * 0.5, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = spots;
+    ctx.beginPath(); ctx.arc(x - s * 0.3, y - s * 0.7, s * 0.1, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(x + s * 0.2, y - s * 0.8, s * 0.12, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(x + s * 0.4, y - s * 0.6, s * 0.08, 0, 7); ctx.fill();
+  }
+
+  function drawGround(cx, cy) {
+    ctx.fillStyle = '#1a2a1e';
+    ctx.fillRect(0, 0, W, H);
+    const cell = 80;
+    const x0 = Math.floor((cx - W / 2) / cell) - 1, x1 = Math.floor((cx + W / 2) / cell) + 1;
+    const y0 = Math.floor((cy - H / 2) / cell) - 1, y1 = Math.floor((cy + H / 2) / cell) + 1;
+    for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) {
+      const h = hash(gx, gy);
+      const sx = gx * cell + hash(gx + 7, gy) * cell - cx + W / 2;
+      const sy = gy * cell + hash(gx, gy + 7) * cell - cy + H / 2;
+      if (h < 0.35) { ctx.fillStyle = '#22382a'; ctx.fillRect(sx, sy, 3, 7); ctx.fillRect(sx + 4, sy + 2, 3, 5); }
+      else if (h < 0.42) { ctx.globalAlpha = 0.55; drawMushroom(sx, sy, 10, ['#a33', '#b86b2e', '#7a4fa3'][Math.floor(h * 100) % 3]); ctx.globalAlpha = 1; }
+      else if (h < 0.44) { ctx.fillStyle = '#2c3b33'; ctx.beginPath(); ctx.ellipse(sx, sy, 12, 8, 0, 0, 7); ctx.fill(); }
+      else if (h < 0.455) { // glowing fairy ring
+        ctx.fillStyle = 'rgba(180,255,200,0.15)';
+        for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; ctx.beginPath(); ctx.arc(sx + Math.cos(a) * 26, sy + Math.sin(a) * 18, 4, 0, 7); ctx.fill(); }
+      }
+    }
+  }
+
+  // A hungry open mouth with teeth; opens wider as the creature gets close to you
+  function drawMouth(x, y, w, open) {
+    const h = Math.max(1.5, w * 0.7 * open);
+    ctx.fillStyle = '#3a0d12';
+    ctx.beginPath(); ctx.ellipse(x, y, w / 2, h / 2, 0, 0, 7); ctx.fill();
+    if (open > 0.25) {
+      ctx.fillStyle = '#ff6f8a'; ctx.beginPath(); ctx.ellipse(x, y + h * 0.25, w * 0.25, h * 0.2, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      const n = Math.max(2, Math.round(w / 5));
+      for (let i = 0; i < n; i++) {
+        const tx = x - w / 2 + (i + 0.5) * (w / n), tw = w / n / 2;
+        ctx.beginPath(); ctx.moveTo(tx - tw, y - h / 2 + 0.5); ctx.lineTo(tx + tw, y - h / 2 + 0.5); ctx.lineTo(tx, y - h / 2 + tw * 1.6); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(tx - tw, y + h / 2 - 0.5); ctx.lineTo(tx + tw, y + h / 2 - 0.5); ctx.lineTo(tx, y + h / 2 - tw * 1.6); ctx.fill();
+      }
+    }
+  }
+  function drawDrool(x, y, t) {
+    ctx.fillStyle = 'rgba(170,220,255,0.8)';
+    ctx.beginPath(); ctx.ellipse(x, y + (t % 1) * 6, 1.5, 2.5, 0, 0, 7); ctx.fill();
+  }
+
+  function drawEnemy(e) {
+    if (e.elite) { ctx.fillStyle = `rgba(255, 216, 74, ${0.18 + 0.08 * Math.sin(S.t * 5)})`; ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r * 0.6, e.r * 1.3, e.r * 0.55, 0, 0, 7); ctx.fill(); }
+    drawEnemyBody(e);
+    if (e.elite) {
+      const top = e.y - e.r * (e.type === 'troll' ? 1.75 : 1.45) - (e.hop || 0);
+      ctx.fillStyle = '#ffd84a'; ctx.strokeStyle = '#8a6a10'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(e.x - 11, top); ctx.lineTo(e.x - 11, top - 9); ctx.lineTo(e.x - 5, top - 4); ctx.lineTo(e.x, top - 12); ctx.lineTo(e.x + 5, top - 4); ctx.lineTo(e.x + 11, top - 9); ctx.lineTo(e.x + 11, top); ctx.closePath(); ctx.fill(); ctx.stroke();
+      const bw = e.r * 2.2, k = Math.max(0, e.hp / e.maxHp);
+      ctx.fillStyle = '#300'; ctx.fillRect(e.x - bw / 2, top - 20, bw, 4); ctx.fillStyle = '#ffd84a'; ctx.fillRect(e.x - bw / 2, top - 20, bw * k, 4);
+      ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#111';
+      ctx.strokeText(BIG[e.big].name, e.x, top - 25); ctx.fillStyle = '#ffe08a'; ctx.fillText(BIG[e.big].name, e.x, top - 25);
+    }
+  }
+
+  function drawEnemyBody(e) {
+    const def = ENEMIES[e.type], r = e.r, t = S.t, p = S.player;
+    const near = Math.sqrt(dist2(e, p));
+    const open = near < 140 ? 0.35 + 0.65 * Math.abs(Math.sin(t * 9 + e.phase)) : 0.15;
+    const facing = p.x >= e.x ? 1 : -1;
+    ctx.save(); ctx.translate(e.x, e.y);
+    const col = e.flash > 0 ? '#fff' : def.color;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(0, r * 0.9, r * 0.8, r * 0.3, 0, 0, 7); ctx.fill();
+    ctx.scale(facing, 1);
+    if (e.hop && e.type !== 'hippie') ctx.translate(0, -e.hop);
+    switch (e.type) {
+      case 'slug': {
+        const sq = 1 + Math.sin(t * 6 + e.phase) * 0.08;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.ellipse(-r * 0.2, r * 0.35, r * 1.3 * sq, r * 0.55, 0, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(r * 0.5, 0, r * 0.65, r * 0.7, 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = col; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(r * 0.4, -r * 0.5); ctx.lineTo(r * 0.3, -r * 1.2); ctx.moveTo(r * 0.75, -r * 0.5); ctx.lineTo(r * 0.95, -r * 1.15); ctx.stroke();
+        ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(r * 0.3, -r * 1.2, 2.2, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(r * 0.95, -r * 1.15, 2.2, 0, 7); ctx.fill();
+        drawMouth(r * 0.75, r * 0.2, r * 0.7, open);
+        if (near < 140) drawDrool(r * 0.75, r * 0.5, t * 1.5 + e.phase);
+        break;
+      }
+      case 'bat': {
+        const f = Math.sin(t * 20 + e.phase) * 0.6;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-r * 2, -r * f); ctx.lineTo(-r, r * 0.4); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r * 2, -r * f); ctx.lineTo(r, r * 0.4); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.8, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.4); ctx.lineTo(-r * 0.4, -r * 1.1); ctx.lineTo(-r * 0.1, -r * 0.6); ctx.moveTo(r * 0.6, -r * 0.4); ctx.lineTo(r * 0.4, -r * 1.1); ctx.lineTo(r * 0.1, -r * 0.6); ctx.fill();
+        ctx.fillStyle = '#ff4'; ctx.fillRect(-4, -4, 2.5, 2.5); ctx.fillRect(2, -4, 2.5, 2.5);
+        drawMouth(0, r * 0.3, r * 0.9, open);
+        break;
+      }
+      case 'goblin': {
+        ctx.fillStyle = e.flash > 0 ? '#fff' : '#5b3a1e'; ctx.fillRect(-r * 0.6, 0, r * 1.2, r * 0.9);
+        ctx.fillStyle = '#f4f4f4'; ctx.fillRect(-r * 0.45, r * 0.05, r * 0.9, r * 0.5); // napkin bib
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -r * 0.25, r * 0.75, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.45); ctx.lineTo(-r * 1.35, -r * 0.85); ctx.lineTo(-r * 0.5, -r * 0.1); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(r * 0.6, -r * 0.45); ctx.lineTo(r * 1.35, -r * 0.85); ctx.lineTo(r * 0.5, -r * 0.1); ctx.fill();
+        ctx.fillStyle = '#f33'; ctx.fillRect(-1, -r * 0.6, 3, 3); ctx.fillRect(5, -r * 0.6, 3, 3);
+        drawMouth(r * 0.15, -r * 0.05, r * 0.8, open);
+        // fork
+        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(r * 0.9, r * 0.7); ctx.lineTo(r * 0.9, -r * 0.6);
+        for (let i = -1; i <= 1; i++) { ctx.moveTo(r * 0.9 + i * 3, -r * 0.6); ctx.lineTo(r * 0.9 + i * 3, -r * 1.0); }
+        ctx.moveTo(r * 0.9 - 3, -r * 0.6); ctx.lineTo(r * 0.9 + 3, -r * 0.6); ctx.stroke();
+        break;
+      }
+      case 'boar': {
+        const trot = Math.sin(t * 14 + e.phase) * 3;
+        ctx.fillStyle = e.flash > 0 ? '#fff' : '#5a3a26';
+        ctx.fillRect(-r * 0.7, r * 0.4, 4, r * 0.5 + trot * 0.3); ctx.fillRect(r * 0.3, r * 0.4, 4, r * 0.5 - trot * 0.3);
+        ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(-r * 0.15, r * 0.15, r * 1.05, r * 0.65, 0, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(r * 0.7, -r * 0.1, r * 0.55, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(r * 0.45, -r * 0.5); ctx.lineTo(r * 0.5, -r * 0.95); ctx.lineTo(r * 0.75, -r * 0.55); ctx.fill();
+        ctx.fillStyle = '#e8a0a0'; ctx.beginPath(); ctx.ellipse(r * 1.2, -r * 0.05, r * 0.2, r * 0.25, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#522'; ctx.fillRect(r * 1.15, -r * 0.12, 2, 3); ctx.fillRect(r * 1.25, -r * 0.12, 2, 3);
+        ctx.fillStyle = '#111'; ctx.fillRect(r * 0.75, -r * 0.35, 3, 3);
+        drawMouth(r * 0.95, r * 0.28, r * 0.55, open);
+        ctx.fillStyle = '#f5f0d0'; ctx.beginPath(); ctx.moveTo(r * 0.75, r * 0.25); ctx.lineTo(r * 0.85, -r * 0.15); ctx.lineTo(r * 0.92, r * 0.25); ctx.fill();
+        break;
+      }
+      case 'pixie': {
+        const g = ctx.createRadialGradient(0, 0, 1, 0, 0, r * 2.4);
+        g.addColorStop(0, 'rgba(255,200,240,0.6)'); g.addColorStop(1, 'rgba(255,160,230,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r * 2.4, 0, 7); ctx.fill();
+        const fl = Math.abs(Math.sin(t * 25 + e.phase));
+        ctx.fillStyle = 'rgba(220,240,255,0.7)';
+        ctx.beginPath(); ctx.ellipse(-r * 0.9, -r * 0.4, r * 0.9 * fl + 1, r * 0.45, -0.5, 0, 7); ctx.fill(); ctx.beginPath(); ctx.ellipse(r * 0.9, -r * 0.4, r * 0.9 * fl + 1, r * 0.45, 0.5, 0, 7); ctx.fill();
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, r * 0.75, 0, 7); ctx.fill();
+        ctx.fillStyle = '#222'; ctx.fillRect(0, -3, 2, 2); ctx.fillRect(4, -3, 2, 2);
+        drawMouth(r * 0.25, r * 0.3, r * 0.7, open);
+        break;
+      }
+      case 'hippie': {
+        ctx.translate(0, -(e.hop || 0));
+        const sway = Math.sin(t * 4) * 0.08, skin = '#e9c39b', hair = '#6b4423';
+        // bell-bottom jeans
+        ctx.fillStyle = '#3d5a9e';
+        for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sx * r * 0.08, r * 0.35); ctx.lineTo(sx * r * 0.38, r * 0.35); ctx.lineTo(sx * r * 0.5, r * 0.98); ctx.lineTo(sx * r * 0.02, r * 0.98); ctx.closePath(); ctx.fill(); }
+        // long hair behind the head and shoulders
+        ctx.fillStyle = hair; ctx.beginPath(); ctx.ellipse(-r * 0.05, -r * 0.45, r * 0.5, r * 0.62, 0, 0, 7); ctx.fill();
+        // tie-dye shirt
+        let tie;
+        if (ctx.createConicGradient) { tie = ctx.createConicGradient(t, 0, 0); ['#ff5f6d', '#ffc371', '#fff36b', '#6bff8f', '#5fc8ff', '#b36bff', '#ff5f6d'].forEach((c, i, a) => tie.addColorStop(i / (a.length - 1), c)); }
+        else { tie = ctx.createRadialGradient(0, 0, 2, 0, 0, r * 0.6); tie.addColorStop(0, '#fff36b'); tie.addColorStop(0.5, '#ff5f6d'); tie.addColorStop(1, '#5fc8ff'); }
+        ctx.fillStyle = tie; ctx.beginPath(); ctx.ellipse(0, 0, r * 0.62, r * 0.5, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(r * 0.05, 0, r * 0.32, 0, 7); ctx.fill();
+        // peace sign on the chest
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(r * 0.05, r * 0.02, r * 0.2, 0, 7); ctx.moveTo(r * 0.05, -r * 0.18); ctx.lineTo(r * 0.05, r * 0.22);
+        ctx.moveTo(r * 0.05, r * 0.02); ctx.lineTo(r * 0.05 - r * 0.14, r * 0.16); ctx.moveTo(r * 0.05, r * 0.02); ctx.lineTo(r * 0.05 + r * 0.14, r * 0.16); ctx.stroke();
+        // arms: one reaching out hungrily toward you
+        ctx.strokeStyle = skin; ctx.lineWidth = r * 0.17; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-r * 0.5, -r * 0.15); ctx.lineTo(-r * 0.78, r * 0.3 + sway * r); ctx.stroke();
+        const reach = e.state === 'dash' ? 0.25 : sway;
+        ctx.beginPath(); ctx.moveTo(r * 0.5, -r * 0.15); ctx.lineTo(r * 1.05, -r * (0.15 + reach)); ctx.stroke();
+        ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(r * 1.1, -r * (0.15 + reach), r * 0.13, 0, 7); ctx.fill();
+        // head, hair fringe, headband with a flower
+        ctx.fillStyle = skin; ctx.beginPath(); ctx.arc(r * 0.05, -r * 0.72, r * 0.36, 0, 7); ctx.fill();
+        ctx.fillStyle = hair; ctx.beginPath(); ctx.ellipse(r * 0.02, -r * 0.98, r * 0.38, r * 0.14, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#ff5f6d'; ctx.fillRect(-r * 0.32, -r * 0.92, r * 0.72, r * 0.09);
+        for (let i = 0; i < 5; i++) { const a = i * 1.26; ctx.fillStyle = '#fff36b'; ctx.beginPath(); ctx.arc(-r * 0.24 + Math.cos(a) * 4, -r * 0.88 + Math.sin(a) * 4, 3, 0, 7); ctx.fill(); }
+        ctx.fillStyle = '#ff9de2'; ctx.beginPath(); ctx.arc(-r * 0.24, -r * 0.88, 2.5, 0, 7); ctx.fill();
+        // round sunglasses
+        ctx.fillStyle = '#3b2a12'; ctx.strokeStyle = '#c99a3b'; ctx.lineWidth = 2;
+        for (const gx of [-0.06, 0.24]) { ctx.beginPath(); ctx.arc(r * gx, -r * 0.74, r * 0.11, 0, 7); ctx.fill(); ctx.stroke(); }
+        ctx.beginPath(); ctx.moveTo(r * 0.05, -r * 0.74); ctx.lineTo(r * 0.13, -r * 0.74); ctx.stroke();
+        // beard and a big hungry mouth
+        ctx.fillStyle = hair; ctx.beginPath(); ctx.ellipse(r * 0.07, -r * 0.46, r * 0.3, r * 0.2, 0, 0, Math.PI); ctx.fill();
+        drawMouth(r * 0.08, -r * 0.5, r * 0.36, e.state === 'dash' || near < 160 ? 0.4 + 0.6 * Math.abs(Math.sin(t * 8)) : 0.25);
+        if (e.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.ellipse(0, -r * 0.2, r * 0.7, r * 0.95, 0, 0, 7); ctx.fill(); }
+        break;
+      }
+      case 'troll': {
+        ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, r * 0.1, r, r * 0.85, 0, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, -r * 0.7, r * 0.55, 0, 7); ctx.fill();
+        ctx.fillStyle = e.flash > 0 ? '#fff' : '#4a5a3c'; ctx.fillRect(-r * 1.15, -r * 0.2, r * 0.35, r * 0.9); ctx.fillRect(r * 0.8, -r * 0.2, r * 0.35, r * 0.9);
+        ctx.fillStyle = '#f80'; ctx.fillRect(-6, -r * 1.0, 4, 4); ctx.fillRect(5, -r * 1.0, 4, 4);
+        drawMouth(0, -r * 0.55, r * 0.75, open);
+        if (near < 140) { drawDrool(-r * 0.25, -r * 0.3, t + e.phase); drawDrool(r * 0.2, -r * 0.3, t * 1.3 + e.phase); }
+        // big spoon
+        ctx.fillStyle = '#bbb'; ctx.fillRect(r * 1.0, -r * 0.9, 3, r * 1.2);
+        ctx.beginPath(); ctx.ellipse(r * 1.0 + 1.5, -r * 1.05, 6, 8, 0, 0, 7); ctx.fill();
+        if (e.elite) break; // elites draw their own health bar
+        ctx.scale(facing, 1); // health bar un-flipped
+        ctx.fillStyle = '#300'; ctx.fillRect(-r, -r * 1.6, r * 2, 4);
+        ctx.fillStyle = '#e33'; ctx.fillRect(-r, -r * 1.6, r * 2 * Math.max(0, e.hp / e.maxHp), 4);
+        break;
+      }
+    }
+    ctx.restore();
+    if (e.concussStacks > 0) { // Concussive stack counter, fading as the 5-second window runs out
+      ctx.globalAlpha = Math.min(1, 0.35 + e.concussT / 5);
+      ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#111';
+      const txt = `✷${e.concussStacks}`, y = e.y - e.r * (e.type === 'troll' ? 1.9 : 1.4) - 4;
+      ctx.strokeText(txt, e.x, y); ctx.fillStyle = e.concussStacks >= 12 ? '#ffcf4a' : '#d9a6ff'; ctx.fillText(txt, e.x, y);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawAura(p) {
+    if (p.w.aura.level > 0) {
+      const rad = auraRadius(p);
+      if (p.w.aura.flash > 0) { p.w.aura.flash -= 1 / 60; ctx.fillStyle = `rgba(220, 255, 140, ${p.w.aura.flash})`; ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill(); }
+      ctx.fillStyle = `rgba(${hasMod(p, 'aura', 'choke') ? '150, 120, 200' : '170, 220, 90'}, ${0.12 + Math.sin(S.t * 4) * 0.03})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(200,240,120,0.35)';
+      for (let i = 0; i < 10; i++) { const a = S.t * 0.7 + i * 0.63, rr = rad * (0.4 + 0.5 * ((i * 0.37 + S.t * 0.2) % 1)); ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * rr, p.y + Math.sin(a) * rr, 3, 0, 7); ctx.fill(); }
+    }
+  }
+
+  // A clone is drawn as a slightly smaller, see-through pink-capped you; a bomb clone glows faster as its fuse runs down
+  function drawClone(c) {
+    const bomber = hasMod(S.player, 'clone', 'trauma');
+    if (bomber) {
+      const pulse = 0.5 + 0.5 * Math.sin(S.t * (c.fuse < 1.5 ? 30 : 10));
+      ctx.fillStyle = `rgba(255, 110, 70, ${0.15 + pulse * 0.25})`; ctx.beginPath(); ctx.arc(c.x, c.y, 22 + pulse * 4, 0, 7); ctx.fill();
+    }
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(0.85, 0.85); ctx.translate(-c.x, -c.y);
+    drawPlayer({ x: c.x, y: c.y, face: c.face, moving: c.moving, hurt: 0, speedBoost: 0, alpha: 0.78, cap: bomber ? '#ff6b3d' : '#d968c4' });
+    ctx.restore();
+    if (bomber) { ctx.fillStyle = '#ffe08a'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText(Math.ceil(c.fuse), c.x, c.y - 30); }
+  }
+
+  function drawPlayer(p) {
+    ctx.save(); ctx.translate(p.x, p.y);
+    const step = p.moving ? Math.sin(S.t * 14) : 0;
+    if (p.alpha) ctx.globalAlpha = p.alpha;
+    if (p.hurt > 0 && Math.floor(p.hurt * 20) % 2) ctx.globalAlpha = 0.4;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 16, 13, 4, 0, 0, 7); ctx.fill();
+    // little feet
+    ctx.fillStyle = '#d9c8a4';
+    ctx.beginPath(); ctx.ellipse(-5, 14 - Math.max(0, step) * 3, 4, 2.5, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.ellipse(5, 14 - Math.max(0, -step) * 3, 4, 2.5, 0, 0, 7); ctx.fill();
+    ctx.translate(0, -Math.abs(step) * 1.5);
+    // stem body
+    ctx.fillStyle = '#f3e6c8';
+    ctx.beginPath(); ctx.moveTo(-8, 13); ctx.quadraticCurveTo(-10, 0, -7, -6); ctx.lineTo(7, -6); ctx.quadraticCurveTo(10, 0, 8, 13); ctx.closePath(); ctx.fill();
+    // face
+    const fx = p.face * 2;
+    ctx.fillStyle = '#222';
+    if (p.hurt > 0) {
+      ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.beginPath();
+      ctx.moveTo(fx - 5, 0); ctx.lineTo(fx - 2, 2); ctx.moveTo(fx - 5, 2); ctx.lineTo(fx - 2, 0);
+      ctx.moveTo(fx + 2, 0); ctx.lineTo(fx + 5, 2); ctx.moveTo(fx + 2, 2); ctx.lineTo(fx + 5, 0); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(fx, 6.5, 2, 2.5, 0, 0, 7); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.ellipse(fx - 3.5, 1, 1.6, 2.4, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.ellipse(fx + 3.5, 1, 1.6, 2.4, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillRect(fx - 3.6, -0.3, 1, 1); ctx.fillRect(fx + 3.4, -0.3, 1, 1);
+      ctx.strokeStyle = '#222'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(fx, 5, 2, 0.2, Math.PI - 0.2); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,130,130,0.5)'; ctx.beginPath(); ctx.arc(fx - 6, 4.5, 1.8, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(fx + 6, 4.5, 1.8, 0, 7); ctx.fill();
+    // cap
+    ctx.fillStyle = p.cap || (p.speedBoost > 0 ? '#3d8fd6' : '#e8423b');
+    ctx.beginPath(); ctx.moveTo(-17, -5); ctx.quadraticCurveTo(-16, -24, 0, -25); ctx.quadraticCurveTo(16, -24, 17, -5); ctx.quadraticCurveTo(0, -1, -17, -5); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-8, -14, 3, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(3, -19, 3.4, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(10, -10, 2.2, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(-1, -9, 1.8, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw() {
+    const p = S.player;
+    drawGround(p.x, p.y);
+    ctx.save();
+    ctx.translate(W / 2 - p.x, H / 2 - p.y);
+
+    for (const c of [p, ...S.clones.filter(c => !c.dead && !hasMod(p, 'clone', 'trauma'))]) drawAura(c);
+
+    // Spores (xp gems)
+    for (const g of S.gems) {
+      if (!inView(g.x, g.y)) continue;
+      const sp = SPORES[g.tier || 'green'], r = sp.r + (g.big ? 1.8 : 0);
+      ctx.fillStyle = g.tier === 'green' && g.big ? '#ffb347' : sp.color;
+      ctx.globalAlpha = 0.25; ctx.beginPath(); ctx.arc(g.x, g.y, r * (g.tier === 'gold' ? 2.6 : 2), 0, 7); ctx.fill(); ctx.globalAlpha = 1; // cheap glow
+      ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, 7); ctx.fill();
+      if (g.tier === 'gold') { // golden spores twinkle
+        ctx.fillStyle = '#fff8d0';
+        ctx.beginPath(); ctx.arc(g.x - r * 0.3, g.y - r * 0.3, r * 0.35, 0, 7); ctx.fill();
+        const tw = 0.5 + 0.5 * Math.sin(S.t * 6 + g.x);
+        ctx.strokeStyle = `rgba(255, 240, 180, ${tw})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(g.x - r * 2, g.y); ctx.lineTo(g.x + r * 2, g.y); ctx.moveTo(g.x, g.y - r * 2); ctx.lineTo(g.x, g.y + r * 2); ctx.stroke();
+      }
+    }
+    ctx.shadowBlur = 0;
+
+    // Magic mushrooms
+    for (const m of S.shrooms) {
+      if (m.life < 5 && Math.floor(m.life * 6) % 2) continue;
+      const col = { red: '#ff4b4b', blue: '#4bb8ff', gold: '#ffd84a' }[m.kind];
+      ctx.shadowColor = col; ctx.shadowBlur = 18;
+      drawMushroom(m.x, m.y + 8 + Math.sin(S.t * 3) * 2, 22, col);
+      ctx.shadowBlur = 0;
+    }
+
+    // Big-enemy attack warnings: the slam's landing circle fills up, the dash lane pulses, aim lines flash before a fan
+    for (const b of S.enemies) {
+      if (!b.big) continue;
+      const cfg = BIG[b.big], col = b.boss ? '255, 157, 226' : '255, 216, 74';
+      if (b.state === 'slam' && b.target) {
+        const k = b.leaping ? 1 : 1 - Math.max(0, b.timer) / cfg.slam.wind;
+        ctx.fillStyle = 'rgba(255, 70, 90, 0.18)'; ctx.beginPath(); ctx.arc(b.target.x, b.target.y, b.target.r, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255, 70, 90, 0.3)'; ctx.beginPath(); ctx.arc(b.target.x, b.target.y, b.target.r * k, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#ff465a'; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.beginPath(); ctx.arc(b.target.x, b.target.y, b.target.r, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      }
+      if (b.state === 'dash' && !b.dashing) {
+        const a = Math.atan2(b.dashDir.y, b.dashDir.x);
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
+        ctx.fillStyle = `rgba(${col}, ${0.15 + 0.15 * Math.abs(Math.sin(S.t * 12))})`; ctx.fillRect(0, -b.r, b.dashLen, b.r * 2);
+        ctx.strokeStyle = `rgb(${col})`; ctx.lineWidth = 2; ctx.setLineDash([12, 10]); ctx.strokeRect(0, -b.r, b.dashLen, b.r * 2); ctx.setLineDash([]);
+        ctx.restore();
+      }
+      if (b.state === 'fan') {
+        const c = cfg.fan, blink = 0.3 + 0.5 * Math.abs(Math.sin(S.t * 16));
+        ctx.strokeStyle = `rgba(255, 90, 90, ${blink})`; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+        for (let i = 0; i < c.n; i++) {
+          const a = b.aim + (i - (c.n - 1) / 2) * (c.spread / ((c.n - 1) / 2));
+          ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + Math.cos(a) * 420, b.y + Math.sin(a) * 420); ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
+    }
+
+    for (const e of S.enemies) if (inView(e.x, e.y, e.r * 2 + 40)) drawEnemy(e);
+
+    // Boss and elite projectiles: rainbow peace signs and spinning cleavers
+    for (const h of S.hazards) {
+      if (!inView(h.x, h.y)) continue;
+      if (h.kind === 'cleaver') {
+        ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.spin);
+        ctx.fillStyle = 'rgba(255, 90, 90, 0.25)'; ctx.beginPath(); ctx.arc(0, 0, h.r * 1.6, 0, 7); ctx.fill();
+        ctx.fillStyle = '#d7dde3'; ctx.fillRect(-h.r, -h.r * 0.55, h.r * 1.3, h.r * 1.1);
+        ctx.fillStyle = '#7a5230'; ctx.fillRect(h.r * 0.3, -h.r * 0.2, h.r * 0.9, h.r * 0.4);
+        ctx.restore();
+        continue;
+      }
+      const col = `hsl(${h.hue}, 90%, 65%)`;
+      ctx.globalAlpha = 0.25; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(h.x, h.y, h.r * 1.7, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = col; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, 7);
+      ctx.moveTo(h.x, h.y - h.r); ctx.lineTo(h.x, h.y + h.r);
+      ctx.moveTo(h.x, h.y); ctx.lineTo(h.x - h.r * 0.7, h.y + h.r * 0.7); ctx.moveTo(h.x, h.y); ctx.lineTo(h.x + h.r * 0.7, h.y + h.r * 0.7);
+      ctx.stroke();
+    }
+
+    // Mycelium tendrils: wiggly pale roots with little hairs
+    for (const td of S.tendrils) {
+      const a = Math.min(1, td.life / 0.25), dx = td.x2 - td.x1, dy = td.y2 - td.y1, len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len, segs = Math.max(4, Math.floor(len / 14));
+      const pt = i => { const k = i / segs, wob = (i === 0 || i === segs) ? 0 : Math.sin(k * 9 + td.seed + S.t * 12) * 6 * Math.sin(k * Math.PI); return [td.x1 + dx * k + nx * wob, td.y1 + dy * k + ny * wob]; };
+      ctx.globalAlpha = a; ctx.lineCap = 'round';
+      const tw = td.thick ? 2.4 : 1;
+      for (const [wid, col] of [[6 * tw, 'rgba(200,255,190,0.25)'], [2.5 * tw, '#efe6d0']]) {
+        ctx.strokeStyle = col; ctx.lineWidth = wid; ctx.beginPath();
+        for (let i = 0; i <= segs; i++) { const [x, y] = pt(i); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#d8ccb0'; ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = 1; i < segs; i += 2) { const [x, y] = pt(i), side = i % 4 === 1 ? 1 : -1; ctx.moveTo(x, y); ctx.lineTo(x + nx * 7 * side + dx / len * 4, y + ny * 7 * side + dy / len * 4); }
+      ctx.stroke();
+      ctx.fillStyle = '#f6f0dc'; ctx.beginPath(); ctx.arc(td.x2, td.y2, 3.5, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    for (const c of S.crystals) {
+      const col = CRYSTALS[c.kind].color, y = c.y + Math.sin(S.t * 3 + c.bob) * 2;
+      if (c.rare) {
+        const g = ctx.createLinearGradient(0, y - 160, 0, y);
+        g.addColorStop(0, col + '00'); g.addColorStop(1, col + 'aa');
+        ctx.fillStyle = g; ctx.fillRect(c.x - 9 - Math.sin(S.t * 5) * 2, y - 160, 18 + Math.sin(S.t * 5) * 4, 160);
+        ctx.fillStyle = col + '44'; ctx.beginPath(); ctx.ellipse(c.x, c.y + 10, 26 + Math.sin(S.t * 4) * 4, 8, 0, 0, 7); ctx.fill();
+        for (let i = 0; i < 6; i++) {
+          const a = S.t * 2.5 + i * Math.PI / 3, r = 20 + Math.sin(S.t * 3 + i) * 4;
+          ctx.fillStyle = i % 2 ? '#fff' : col; ctx.beginPath(); ctx.arc(c.x + Math.cos(a) * r, y + Math.sin(a) * r * 0.5, 2, 0, 7); ctx.fill();
+        }
+        drawCrystal(c.x, y, 11 + Math.sin(S.t * 6) * 1.5, col);
+      } else drawCrystal(c.x, y, 7, col);
+    }
+    for (const w of S.shockwaves) {
+      if (w.r <= 0) continue;
+      ctx.globalAlpha = Math.max(0, 1 - w.r / w.max); ctx.strokeStyle = w.color; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, 7); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    if (S.merchant) drawMerchant(S.merchant);
+    if (S.auntie) drawAuntie(S.auntie);
+    drawPlayer(p);
+
+    for (const c of S.clones) if (!c.dead) drawClone(c);
+    // Orbiting mushrooms
+    for (const c of [p, ...S.clones.filter(c => !c.dead && !hasMod(p, 'clone', 'trauma'))]) {
+      if (c.w.orbit.level <= 0) continue;
+      const size = 18 * orbitSize(c);
+      for (const b of orbitPositions(c)) drawMushroom(b.x, b.y + size * 0.45, size, '#c25bff', '#f3d4ff');
+    }
+
+    // Bullets
+    for (const b of S.bullets) {
+      if (!inView(b.x, b.y)) continue;
+      if (b.kind === 'bolt') {
+        ctx.fillStyle = 'rgba(176, 102, 255, 0.35)'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, 7); ctx.fill(); // cheap glow
+        ctx.fillStyle = '#d9a6ff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+      } else {
+        ctx.strokeStyle = '#7bd36b'; ctx.lineWidth = 3;
+        const a = Math.atan2(b.vy, b.vx);
+        ctx.beginPath(); ctx.moveTo(b.x - Math.cos(a) * 8, b.y - Math.sin(a) * 8); ctx.lineTo(b.x + Math.cos(a) * 6, b.y + Math.sin(a) * 6); ctx.stroke();
+      }
+    }
+    ctx.shadowBlur = 0;
+
+    for (const q of S.particles) { if (!inView(q.x, q.y)) continue; ctx.globalAlpha = q.life * 2; ctx.fillStyle = q.color; ctx.fillRect(q.x - 2, q.y - 2, 4, 4); }
+    ctx.globalAlpha = 1;
+    ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center';
+    for (const t of S.texts) { ctx.globalAlpha = Math.min(1, t.life * 2); ctx.fillStyle = t.color || '#fff'; ctx.fillText(t.txt, t.x, t.y); }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    drawHUD();
+  }
+
+  function drawCrystal(x, y, s, col) {
+    ctx.shadowColor = col; ctx.shadowBlur = 12; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(x, y - s * 1.3); ctx.lineTo(x + s * 0.8, y); ctx.lineTo(x, y + s * 1.1); ctx.lineTo(x - s * 0.8, y); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath(); ctx.moveTo(x, y - s * 1.3); ctx.lineTo(x + s * 0.3, y - s * 0.2); ctx.lineTo(x - s * 0.3, y - s * 0.2); ctx.closePath(); ctx.fill();
+  }
+
+  function drawMerchant(m) {
+    ctx.save(); ctx.translate(m.x, m.y);
+    const hop = Math.abs(Math.sin(S.t * 3)) * 3;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 18, 20, 5, 0, 0, 7); ctx.fill();
+    ctx.translate(0, -hop);
+    // backpack stuffed with crystals
+    ctx.fillStyle = '#7a5230'; ctx.fillRect(-24, -14, 14, 26);
+    drawCrystal(-20, -18, 4, CRYSTALS.blue.color); drawCrystal(-14, -20, 4, CRYSTALS.purple.color);
+    // toad body and head
+    ctx.fillStyle = '#5c9a4a'; ctx.beginPath(); ctx.ellipse(0, 6, 18, 13, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#d8e8a8'; ctx.beginPath(); ctx.ellipse(0, 9, 11, 8, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#5c9a4a'; ctx.beginPath(); ctx.arc(-7, -8, 6, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(7, -8, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-7, -9, 3.5, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(7, -9, 3.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(-6.5, -9, 1.8, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(7.5, -9, 1.8, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2e4a24'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, -2, 8, 0.2, Math.PI - 0.2); ctx.stroke();
+    // little hat
+    ctx.fillStyle = '#6b3fa0'; ctx.fillRect(-8, -16, 16, 3); ctx.fillRect(-5, -24, 10, 8);
+    // lantern
+    ctx.strokeStyle = '#555'; ctx.beginPath(); ctx.moveTo(18, 2); ctx.lineTo(22, -8); ctx.stroke();
+    ctx.fillStyle = '#ffd84a'; ctx.shadowColor = '#ffd84a'; ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(22, -10, 3.5, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffe08a'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('SHOP', 0, -32 - Math.sin(S.t * 4) * 2);
+    ctx.restore();
+  }
+
+  // Small canvas icons for each skill, drawn centered at (x, y) in a box of size s
+  function drawSkillIcon(id, x, y, s) {
+    const r = s * 0.32;
+    ctx.save(); ctx.translate(x, y); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const dot = (dx, dy, rr, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(dx, dy, rr, 0, 7); ctx.fill(); };
+    switch (id) {
+      case 'bolt': ctx.shadowColor = '#b066ff'; ctx.shadowBlur = 8; dot(r * 0.2, -r * 0.2, r * 0.55, '#d9a6ff'); ctx.shadowBlur = 0; dot(-r * 0.5, r * 0.5, r * 0.25, '#b98ae6'); dot(-r * 0.9, r * 0.9, r * 0.14, '#8f6bb8'); break;
+      case 'orbit': ctx.strokeStyle = '#8a6bb8'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke(); drawMushroom(r * 0.7, r * 0.2, r * 0.9, '#c25bff', '#f3d4ff'); drawMushroom(-r * 0.7, -r * 0.05, r * 0.9, '#c25bff', '#f3d4ff'); break;
+      case 'aura': ctx.fillStyle = 'rgba(170,220,90,0.45)'; ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0, 7); ctx.fill(); for (let i = 0; i < 6; i++) { const a = i * 1.05; dot(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.13, '#d8f5a0'); } break;
+      case 'thorn': ctx.strokeStyle = '#7bd36b'; ctx.lineWidth = 2; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.35, Math.sin(a) * r * 0.35); ctx.lineTo(Math.cos(a) * r * 1.05, Math.sin(a) * r * 1.05); ctx.stroke(); } dot(0, 0, r * 0.25, '#4f8f45'); break;
+      case 'tendril': ctx.strokeStyle = '#efe6d0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r, r); ctx.quadraticCurveTo(-r * 0.2, r * 0.2, 0, 0); ctx.quadraticCurveTo(r * 0.4, -r * 0.2, r, -r * 0.6); ctx.moveTo(0, 0); ctx.quadraticCurveTo(r * 0.3, r * 0.5, r * 0.9, r * 0.6); ctx.stroke(); dot(r, -r * 0.6, 2.2, '#f6f0dc'); dot(r * 0.9, r * 0.6, 2.2, '#f6f0dc'); break;
+      case 'clone': ctx.globalAlpha = 0.55; drawMushroom(r * 0.45, r * 0.75, r * 1.3, '#d968c4'); ctx.globalAlpha = 1; drawMushroom(-r * 0.35, r * 0.85, r * 1.4, '#e8423b'); break;
+      case 'hp': ctx.fillStyle = '#ff6b6b'; ctx.beginPath(); ctx.moveTo(0, r * 0.9); ctx.bezierCurveTo(-r * 1.4, -r * 0.1, -r * 0.6, -r * 1.1, 0, -r * 0.35); ctx.bezierCurveTo(r * 0.6, -r * 1.1, r * 1.4, -r * 0.1, 0, r * 0.9); ctx.fill(); break;
+      case 'speed': ctx.strokeStyle = '#6bc7ff'; ctx.lineWidth = 2.2; for (const dy of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.moveTo(-r, dy * r); ctx.lineTo(r * (0.3 - Math.abs(dy) * 0.5), dy * r); ctx.stroke(); } ctx.beginPath(); ctx.moveTo(r * 0.3, -r * 0.6); ctx.lineTo(r, 0); ctx.lineTo(r * 0.3, r * 0.6); ctx.stroke(); break;
+      case 'might': ctx.fillStyle = '#b4e05a'; ctx.beginPath(); ctx.moveTo(-r * 0.3, -r); ctx.lineTo(r * 0.3, -r); ctx.lineTo(r * 0.3, -r * 0.3); ctx.lineTo(r * 0.9, r * 0.9); ctx.lineTo(-r * 0.9, r * 0.9); ctx.lineTo(-r * 0.3, -r * 0.3); ctx.closePath(); ctx.fill(); dot(-r * 0.2, r * 0.45, r * 0.15, '#3c5a1e'); dot(r * 0.3, r * 0.2, r * 0.11, '#3c5a1e'); break;
+      case 'magnet': ctx.strokeStyle = '#d8ccb0'; ctx.lineWidth = 1.4; for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r); ctx.lineTo(-Math.cos(a) * r, -Math.sin(a) * r); ctx.stroke(); } ctx.beginPath(); ctx.arc(0, 0, r * 0.55, 0, 7); ctx.stroke(); dot(0, 0, r * 0.2, '#9dff8a'); break;
+      case 'regen': ctx.fillStyle = '#5ee07a'; ctx.beginPath(); ctx.moveTo(-r * 0.8, r * 0.8); ctx.quadraticCurveTo(-r, -r, r * 0.9, -r * 0.9); ctx.quadraticCurveTo(r * 0.8, r * 0.9, -r * 0.8, r * 0.8); ctx.fill(); ctx.strokeStyle = '#2f7a45'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-r * 0.8, r * 0.8); ctx.lineTo(r * 0.5, -r * 0.5); ctx.stroke(); break;
+      case 'xpgain': ctx.shadowColor = '#9dff8a'; ctx.shadowBlur = 8; dot(0, 0, r * 0.45, '#9dff8a'); dot(-r * 0.75, r * 0.5, r * 0.22, '#ff8ad8'); dot(r * 0.75, -r * 0.55, r * 0.25, '#ffd84a'); ctx.shadowBlur = 0; break;
+      case 'crystalluck': drawCrystal(0, 0, r * 0.75, '#4da6ff'); break;
+    }
+    ctx.restore();
+  }
+
+  // Bottom-centre skill bar: active slots (with cooldown sweeps) above, passive slots below; empty slots are outlines
+  function drawSkillBar() {
+    const p = S.player, small = W < 520;
+    const rows = [['active', small ? 38 : 46], ['passive', small ? 28 : 32]];
+    let y = H - 10;
+    for (const [type, size] of [...rows].reverse()) {
+      const owned = UPGRADES.filter(u => u.type === type && (p.upgrades[u.id] || 0) > 0);
+      const slots = p.slots[type], gap = 5, total = slots * size + (slots - 1) * gap;
+      let x = W / 2 - total / 2;
+      y -= size;
+      for (let i = 0; i < slots; i++, x += size + gap) {
+        const u = owned[i], cx = x + size / 2, cy = y + size / 2;
+        ctx.fillStyle = u ? 'rgba(14, 24, 18, 0.82)' : 'rgba(14, 24, 18, 0.35)';
+        ctx.strokeStyle = u ? (type === 'active' ? '#4da6ff' : '#5ee07a') : 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = u ? 1.5 : 1;
+        ctx.beginPath(); ctx.roundRect(x, y, size, size, 7); ctx.fill(); ctx.stroke();
+        if (!u) continue;
+        drawSkillIcon(u.id, cx, cy, size);
+        // cooldown: a dark wedge for the time remaining, sweeping away clockwise
+        const w = p.w[u.id];
+        let frac = 0;
+        if (w && w.cdMax && w.cd > 0) frac = Math.min(1, w.cd / w.cdMax);
+        if (u.id === 'clone') { const c = S.clones[0]; if (c && c.dead && hasMod(p, 'clone', 'trauma')) frac = Math.min(1, c.respawn / (hasMod(p, 'clone', 'extratrauma') ? 5 : 10)); }
+        if (frac > 0.02) {
+          ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, size, size, 7); ctx.clip();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, size, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          if (w && w.cd >= 1) { ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(size * 0.32)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText(Math.ceil(w.cd), cx, cy + size * 0.11); }
+        }
+        // level badge
+        const lvl = String(p.upgrades[u.id]);
+        ctx.font = `bold ${size < 34 ? 9 : 10}px system-ui`; ctx.textAlign = 'right';
+        ctx.lineWidth = 3; ctx.strokeStyle = '#0e1812'; ctx.strokeText(lvl, x + size - 3, y + size - 3);
+        ctx.fillStyle = '#ffe08a'; ctx.fillText(lvl, x + size - 3, y + size - 3);
+      }
+      y -= 6;
+    }
+  }
+
+  function drawHUD() {
+    const p = S.player;
+    // XP bar
+    ctx.fillStyle = '#0a120d'; ctx.fillRect(0, 0, W, 12);
+    ctx.fillStyle = '#7be36b'; ctx.fillRect(0, 0, W * Math.min(1, p.xp / p.xpNext), 12);
+    ctx.font = 'bold 18px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+    const m = Math.floor(S.t / 60), s = Math.floor(S.t % 60).toString().padStart(2, '0');
+    ctx.fillText(`${m}:${s}`, W / 2, 36);
+    ctx.textAlign = 'left'; ctx.font = 'bold 14px system-ui';
+    ctx.fillText(`Lv ${p.level}`, 12, 32);
+    ctx.textAlign = 'right'; ctx.fillText(`☠ ${S.kills}`, W - 12, 32);
+    // crystal wallet
+    let cx = W - 14;
+    for (const k of ['purple', 'red', 'green', 'blue']) {
+      ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = 'bold 13px system-ui';
+      ctx.fillText(p.crystals[k], cx, 56); cx -= ctx.measureText(String(p.crystals[k])).width + 12;
+      drawCrystal(cx + 4, 51, 5, CRYSTALS[k].color); cx -= 12;
+    }
+    // Forage progress per mushroom type: level and pickups toward the next level
+    let fy = 76;
+    for (const t of ['red', 'blue', 'gold']) {
+      const f = S.forage[t];
+      if (!f.count) continue;
+      const txt = f.level >= FORAGE_MAX ? `Lv ${f.level} MAX` : `Lv ${f.level} · ${f.count - f.level * FORAGE_EVERY}/${FORAGE_EVERY}`;
+      ctx.textAlign = 'right'; ctx.font = 'bold 12px system-ui'; ctx.fillStyle = '#eee'; ctx.fillText(txt, W - 14, fy);
+      drawMushroom(W - 24 - ctx.measureText(txt).width, fy + 2, 11, SHROOM_TYPES[t].color);
+      fy += 18;
+    }
+    // Boss health bar
+    if (S.boss) {
+      const bw = Math.min(520, W - 40), bx = W / 2 - bw / 2, by = 84, k = Math.max(0, S.boss.hp / S.boss.maxHp);
+      ctx.fillStyle = 'rgba(10, 20, 14, 0.85)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 14);
+      const g = ctx.createLinearGradient(bx, 0, bx + bw, 0); g.addColorStop(0, '#ff5f6d'); g.addColorStop(0.5, '#ffc371'); g.addColorStop(1, '#b36bff');
+      ctx.fillStyle = g; ctx.fillRect(bx, by, bw * k, 10);
+      ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#111';
+      ctx.strokeText('☮ GIANT HIPPIE ☮', W / 2, by + 26); ctx.fillStyle = '#ff9de2'; ctx.fillText('☮ GIANT HIPPIE ☮', W / 2, by + 26);
+    }
+    if (S.banner) {
+      ctx.globalAlpha = Math.min(1, S.banner.life); ctx.textAlign = 'center'; ctx.font = 'bold 15px system-ui';
+      const tw = ctx.measureText(S.banner.txt).width + 24;
+      ctx.fillStyle = 'rgba(10,20,14,0.8)'; ctx.fillRect(W / 2 - tw / 2, 48, tw, 26);
+      ctx.fillStyle = S.banner.color || '#ffe08a'; ctx.fillText(S.banner.txt, W / 2, 66); ctx.globalAlpha = 1;
+    }
+    // arrows pointing to an off-screen merchant or rare crystal
+    const edgeArrow = (wx, wy, col, icon) => {
+      const mx = wx - p.x + W / 2, my = wy - p.y + H / 2, pad = 30;
+      if (mx >= 0 && mx <= W && my >= 0 && my <= H) return;
+      const ax = Math.max(pad, Math.min(W - pad, mx)), ay = Math.max(pad + 60, Math.min(H - pad, my)), ang = Math.atan2(my - H / 2, mx - W / 2);
+      ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-4, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      if (icon) { ctx.font = '16px system-ui'; ctx.textAlign = 'center'; ctx.fillText(icon, ax - Math.cos(ang) * 22, ay - Math.sin(ang) * 22 + 6); }
+      else drawCrystal(ax - Math.cos(ang) * 22, ay - Math.sin(ang) * 22, 6, col);
+    };
+    if (S.boss) edgeArrow(S.boss.x, S.boss.y, '#ff9de2', '☮');
+    for (const e of S.enemies) if (e.elite) edgeArrow(e.x, e.y, '#ffd84a', '⚔');
+    if (S.merchant) edgeArrow(S.merchant.x, S.merchant.y, '#ffe08a', '🐸');
+    if (S.auntie) edgeArrow(S.auntie.x, S.auntie.y, '#d9a6ff', '✨');
+    for (const c of S.crystals) if (c.rare) edgeArrow(c.x, c.y, CRYSTALS[c.kind].color);
+
+    if (S.flash) {
+      ctx.globalAlpha = Math.max(0, S.flash.life / 0.7) * 0.55; ctx.fillStyle = S.flash.color; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+    }
+    if (S.bigText) {
+      const t = S.bigText, age = 2.5 - t.life, scale = age < 0.25 ? 0.4 + (age / 0.25) * 0.8 : 1.2 - Math.min(0.2, (age - 0.25) * 0.8);
+      ctx.save(); ctx.translate(W / 2, H * 0.3); ctx.scale(scale, scale); ctx.rotate(Math.sin(age * 10) * 0.03);
+      ctx.globalAlpha = Math.min(1, t.life * 2); ctx.textAlign = 'center'; ctx.font = `900 ${Math.min(52, W / 12)}px system-ui`;
+      ctx.lineWidth = 8; ctx.strokeStyle = '#111'; ctx.strokeText(t.txt, 0, 0);
+      ctx.shadowColor = t.color; ctx.shadowBlur = 24; ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0);
+      ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = 'bold 16px system-ui';
+      ctx.fillText(t.txt.includes('PURPLE') ? 'Save it to unlock an extra active skill slot!' : 'Save it to unlock an extra passive skill slot!', 0, 34);
+      ctx.restore(); ctx.globalAlpha = 1;
+    }
+    // HP bar under player
+    const bx = W / 2 - 18, by = H / 2 + 22;
+    ctx.fillStyle = '#400'; ctx.fillRect(bx, by, 36, 5);
+    ctx.fillStyle = '#e33'; ctx.fillRect(bx, by, 36 * Math.max(0, p.hp / p.maxHp), 5);
+    let hy = 52;
+    if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, hy); hy += 18; }
+    ctx.textAlign = 'left'; ctx.fillStyle = '#c9a8ff'; ctx.font = '12px system-ui';
+    for (const k in p.mods) p.mods[k].forEach(c => { ctx.fillText('✦ ' + MOD_TREES[k][c].name, 12, hy); hy += 16; });
+    if (S.paused && !menuOpen()) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = 'bold 32px system-ui'; ctx.fillText('Paused (P)', W / 2, H / 2);
+    }
+    drawSkillBar();
+    // Touch joystick
+    if (touch.active) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(touch.sx, touch.sy, 50, 0, 7); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(touch.x, touch.y, 18, 0, 7); ctx.fill();
+    }
+  }
+
+  // ---------- Loop ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (S) {
+      if (S.running && !S.paused) {
+        // celebration effects run on real time and pause with the game
+        if (S.slowmo > 0) S.slowmo -= dt;
+        if (S.flash && (S.flash.life -= dt) <= 0) S.flash = null;
+        if (S.bigText && (S.bigText.life -= dt) <= 0) S.bigText = null;
+        update(S.slowmo > 0 ? dt * 0.3 : dt);
+      }
+      draw();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function start() {
+    if (S && S.log && S.running) { S.log.status = 'restarted'; saveRunLog(); }
+    newGame(); initUpgradeCounts(); startRunLog();
+    // Opening wave: a ring of slugs already on screen, close enough to see but out of biting range
+    const ring = Math.min(W, H) * 0.32;
+    for (let i = 0; i < 8; i++) spawnEnemy('slug', (i / 8) * Math.PI * 2 + rand(-0.2, 0.2), Math.max(130, ring * rand(0.85, 1.15)));
+    ['menu', 'gameover', 'levelup', 'shop', 'augshop', 'testPanel'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    document.getElementById('testBtn').classList.remove('hidden');
+    document.querySelector('#testPanel [data-test="god"]').textContent = 'Invincible: off';
+    last = performance.now();
+  }
+  // ---------- Test realm tools ----------
+  const testBtn = document.getElementById('testBtn'), testPanel = document.getElementById('testPanel'), testMsg = document.getElementById('testMsg');
+  testBtn.onclick = () => { if (!S || !S.running || menuOpen()) return; S.paused = true; testMsg.textContent = ''; testPanel.classList.remove('hidden'); };
+  document.getElementById('testClose').onclick = () => { testPanel.classList.add('hidden'); resumeGame(); };
+  function maxSkill(id) {
+    const p = S.player, u = UPGRADES.find(x => x.id === id);
+    if (!(p.upgrades[id] > 0) && !canLearn(u)) p.slots[u.type]++; // make room in the test realm
+    while ((p.upgrades[id] || 0) < u.max) gainLevel(u);
+    const tree = MOD_TREES[id];
+    if (tree) { p.mods[id] = []; let path = ''; for (let i = 0; i < 3; i++) { path += Math.random() < 0.5 ? 'a' : 'b'; p.mods[id].push(path); } }
+    return u.name;
+  }
+  testPanel.addEventListener('click', e => {
+    const b = e.target.closest('button[data-test]'); if (!b) return;
+    const p = S.player, t = b.dataset.test;
+    if (t === 'max-bolt') testMsg.textContent = maxSkill('bolt') + ' is now level 15 (random modifiers).';
+    if (t === 'max-random') { const ids = UPGRADES.filter(u => u.type === 'active' && (p.upgrades[u.id] || 0) < 15).map(u => u.id); testMsg.textContent = ids.length ? maxSkill(ids[Math.floor(Math.random() * ids.length)]) + ' is now level 15.' : 'Every active skill is already 15.'; }
+    if (t === 'max-passives') { const done = UPGRADES.filter(u => u.type === 'passive' && p.upgrades[u.id] > 0).map(u => maxSkill(u.id)); testMsg.textContent = done.length ? 'Maxed: ' + done.join(', ') : 'Learn a passive first.'; }
+    if (t === 'crystals') { p.crystals.blue += 100; p.crystals.green += 100; testMsg.textContent = '+100 blue and green crystals.'; }
+    if (t === 'shop') { S.merchant = null; S.auntie = null; spawnMerchant(); testMsg.textContent = auntieUnlocked() ? 'Old Toadley and Auntie Amanita are nearby.' : 'Old Toadley is nearby. Auntie needs a level 15 skill first.'; }
+    if (t === 't10') { S.t = Math.max(S.t, 600); S.eliteAt = S.t + 1; testMsg.textContent = 'Jumped to 10:00. An elite is coming.'; }
+    if (t === 't1950') { S.t = Math.max(S.t, 1190); testMsg.textContent = 'Jumped to 19:50. The boss arrives in 10 seconds.'; }
+    if (t === 'god') { p.god = !p.god; b.textContent = 'Invincible: ' + (p.god ? 'on' : 'off'); }
+  });
+
+  document.getElementById('startBtn').onclick = start;
+  document.getElementById('restartBtn').onclick = start;
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
