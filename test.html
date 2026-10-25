@@ -1103,14 +1103,12 @@
   }
 
   // ---------- Level up ----------
-  // XP needed to go from level L to L + 1: the first five levels are hand-set, then the cost grows a little faster each
-  // level (XP_CURVE), so strong runs slow down while enemy XP growth keeps weaker runs moving. Tuned so a typical run
-  // with no XP buffs reaches about level 45 at 20 minutes.
-  const XP_CURVE = 0.6;
-  const XP_LATE_FROM = 18, XP_LATE = 0.4; // extra cost per level past 18, growing each level, to slow mid-late game
+  // XP needed to go from level L to L + 1. Fitted to a real player's logged XP income (v0.0.4-test run: ~100k XP by
+  // 10:00, ~240k by 13:00): total XP to reach level L is XP_SCALE x L^4, which paces that run at about level 5 at 1:00,
+  // 16 at 5:00, 28 at 10:00, 38 at 15:00 and 48 at 20:00.
+  const XP_SCALE = 0.161;
   const XP_GAIN = 0.85; // all spores give 15% less XP than their base value
-  const xpToNext = L => (L <= 5 ? [5, 10, 17, 26, 37][L - 1]
-    : Math.round(37 + 4 * (L - 5) + XP_CURVE * (L - 5) ** 2 + XP_LATE * Math.max(0, L - XP_LATE_FROM) ** 2));
+  const xpToNext = L => Math.max(5, Math.round(XP_SCALE * ((L + 1) ** 4 - L ** 4)));
   const menuOpen = () => ['levelup', 'shop', 'augshop', 'testPanel'].some(id => !document.getElementById(id).classList.contains('hidden'));
 
   // Adds one level to a skill; returns the modifier tier it just unlocked, or -1
