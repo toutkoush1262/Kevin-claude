@@ -18,20 +18,13 @@ A small Vampire Survivors–style game: you are a mushroom, and every hungry cre
 
 ## Versions
 
+- **v0.0.4 — Auntie Amanita & Shroomerang update.** Once any skill reaches level 15, Auntie Amanita appears near Old Toadley every time he does (with an arrow when she's off screen) and sells three augments per maxed skill for 20, 40, then 60 crystals (blue for actives, green for passives). New active skill **Shroomerang** throws spinning caps that fly out and back, hitting on both trips, with its own modifier tree and augments; a 7th active slot costs 4 purple. XP now follows a steeper curve fitted to real logged runs (total XP to level L is 0.227 × L^3.24, with early levels discounted), so a strong all-buffs run tops out near level 100 at 20:00. Enemy health eases in over minutes 3-8. Propagate's Transplant Trauma blasts cover the whole screen every 10 seconds and scale with the skill's level.
 - **v0.0.3 — Skill slot update.** You can hold 4 active and 4 passive skills. Unlock more in Old Toadley's shop: active slots cost purple crystals (2, then 3), passive slots cost red crystals (2, 3, then 4). Red and purple can no longer be spent on skill levels. A skill bar at the bottom of the screen shows your slotted skills, their levels and cooldowns.
 - **v0.0.2 — Forage update.** Magic mushrooms level up: every 5 of a color gives that color a Forage level (max 5) with a choice of stackable enhancements. Each color spawns on its own timer and gets rarer as a run goes on.
 - **v0.0.1** — Everything before Forage: six active skills with branching modifiers at levels 5/10/15, passives, crystals and Old Toadley's shop, pink and golden spores, and the tuned XP curve.
 
-Each version is a git tag (`v0.0.1`, `v0.0.2`, `v0.0.3`); check one out to play that build.
+Each version is a git tag (`v0.0.1` to `v0.0.4`); check one out to play that build.
 
 ## Test realm
 
-`test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility).
-
-Currently testing **v0.0.4-test — Auntie Amanita & augments**: once any skill reaches level 15, Auntie Amanita appears near Old Toadley every time he does (with an arrow when she's off screen). She sells three augments for each maxed skill, in any order, for 20, 40, then 60 crystals: blue for active skills, green for passives.
-
-Also testing **Shroomerang**, a new active skill: it throws spinning mushroom caps that slow near the far end, turn around and fly back to you, hitting enemies on both trips. Up to 4 caps per throw at level 15, with its own modifier tree and augments. The test realm also allows a 7th active slot (4 purple), since there are now 7 active skills.
-
-Also testing a **steeper XP curve fitted to a real logged run**: after the first five levels, total XP to reach level L is 0.227 × L^3.24, so a strong run with every XP buff reaches about level 55 at 10:00 and level 100 (the intended top end) at 20:00. That run actually reached 74 at 10:00 and 97 at 13:00 on the old curve. Early levels are discounted (45% of the cost at level 6, full cost by level 35) so runs keep up when enemies crowd in at 2-3 minutes. Enemy health also ramps in more gently between minutes 3 and 8 (about 25% less health at 5:00) and is back to full strength by 10:00, so elites and the boss are unchanged.
-
-Also testing a **Transplant Trauma rework** for Propagate: the clone explodes every 10 seconds (5-second fuse, 5 seconds to respawn) for (85 + 35 × Propagate level) × Might plus half your max HP, so they keep up with enemy health, and they cover a whole phone screen (480 radius). Emotionally Stable pulses every 1.5 seconds for 60% damage, and Abandonment Issues blasts deal double damage to elites and the boss.
+`test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility). It currently matches v0.0.4.
