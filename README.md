@@ -27,4 +27,8 @@ Each version is a git tag (`v0.0.1` to `v0.0.4`); check one out to play that bui
 
 ## Test realm
 
-`test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility). It currently matches v0.0.4.
+`test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility). Currently testing on top of v0.0.4:
+
+- **Fewer, tougher enemies.** 15% fewer spawns at the start (full rate by 5:00). Slugs thin out from 3:00 and are gone by 10:00, and bats drop to 40% by 10:00, so the mid and late game has fewer enemies that die to anything.
+- **Turbo snails** replace slugs from 10:00: at most 3 at a time, one every 12-20 seconds. Their shell soaks up the first hit of any kind. They brace for about a second (a red lane shows where they'll go), dash about 300 px in a straight line for 1.5x damage, then rest.
+- **Trolls are immune to knockback.**
