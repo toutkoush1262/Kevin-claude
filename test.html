@@ -302,11 +302,11 @@
     bbb: { id: 'splitreturn', name: 'Split Return', desc: 'At the turnaround each Shroomerang splits into 2 that curve back on different paths (60% damage each).' },
   };
   MOD_TREES.clone = {
-    a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 2 seconds, dealing damage equal to half your max HP in a large area. Respawns every 5 seconds.' },
+    a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 2 seconds in a large area, dealing damage that grows with Propagate\'s level, plus half your max HP. Respawns every 5 seconds.' },
     aa: { id: 'extratrauma', name: 'Extra Traumatic', desc: 'Clones explode after 1 second and respawn after 2.' },
-    aaa: { id: 'stable', name: 'Emotionally Stable', desc: 'Clones explode every 2 seconds and no longer despawn after exploding.' },
+    aaa: { id: 'stable', name: 'Emotionally Stable', desc: 'Clones never despawn: they pulse every 1.5 seconds for 60% damage, guarding you as they follow.' },
     aab: { id: 'lingering', name: 'Lingering Trauma', desc: 'The explosion area detonates two more times after the clone dies: first for 50% damage, then for 150%.' },
-    ab: { id: 'abandon', name: 'Abandonment Issues', desc: 'Your clone runs toward the strongest enemy when it spawns.' },
+    ab: { id: 'abandon', name: 'Abandonment Issues', desc: 'Your clone runs toward the strongest enemy when it spawns, and its blasts deal double damage to elites and the boss.' },
     aba: { id: 'runaway', name: 'Runaway', desc: 'Spawn two additional clones, each chasing a different strong enemy. Your clones move twice as fast.' },
     abb: { id: 'walkaway', name: 'Walkaway', desc: 'Your clone moves at 50% speed but deals double damage in a much larger area.' },
     b: { id: 'extraclone', name: 'Extra Propagation', desc: 'Spawn a second clone behind you.' },
@@ -338,7 +338,7 @@
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
       type: 'active', apply: p => { p.w.thorn.level++; } },
     { id: 'clone', name: 'Propagate', desc: 'Grows a clone of you that follows you around and uses your skills at reduced strength.', max: SKILL_MAX,
-      info: p => `${Math.round(cloneEff((p.upgrades.clone || 0) + 1) * 100)}% strength`,
+      info: p => { const l = (p.upgrades.clone || 0) + 1; return hasMod(p, 'clone', 'trauma') ? `blast ${Math.round((100 + 40 * l) * p.might + p.maxHp * 0.5)} damage` : `${Math.round(cloneEff(l) * 100)}% strength`; },
       type: 'active', apply: p => { p.w.clone.level++; } },
     { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
       type: 'passive', apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); } },
@@ -821,8 +821,10 @@
   }
   function cloneExplode(x, y, mult) {
     const p = S.player, rad = 150 * (aug('clone', 'kin') ? Math.sqrt(1.5) : 1) * (hasMod(p, 'clone', 'walkaway') ? 1.75 : 1); // Kinship: +50% area; Walkaway: ~3x area
-    const dmg = p.maxHp * 0.5 * p.might * (1 + 0.02 * (p.w.clone.level - 1)) * (hasMod(p, 'clone', 'walkaway') ? 2 : 1) * mult * (aug('clone', 'strongspawn') ? 1.4 : 1);
-    for (const e of S.enemies) if (dist2(e, { x, y }) < (rad + e.r) ** 2) damageEnemy(e, dmg, (e.x - x) * 2, (e.y - y) * 2);
+    // Grows with Propagate's level and Might, plus half your max HP (a bonus for tanky builds)
+    const dmg = ((100 + 40 * p.w.clone.level) * p.might + p.maxHp * 0.5) * (hasMod(p, 'clone', 'walkaway') ? 2 : 1) * mult * (aug('clone', 'strongspawn') ? 1.4 : 1);
+    const hunter = hasMod(p, 'clone', 'abandon'); // Abandonment Issues: double damage to elites and the boss
+    for (const e of S.enemies) if (dist2(e, { x, y }) < (rad + e.r) ** 2) damageEnemy(e, dmg * (hunter && (e.elite || e.boss) ? 2 : 1), (e.x - x) * 2, (e.y - y) * 2);
     S.shockwaves.push({ x, y, r: 0, max: rad, life: 0.6, color: '#ff8a5c' }, { x, y, r: -30, max: rad, life: 0.7, color: '#ffd84a' });
     for (let i = 0; i < 30; i++) { const a = Math.random() * 6.28, sp = rand(100, 320); S.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), color: i % 2 ? '#ff8a5c' : '#f3e6c8' }); }
   }
@@ -858,8 +860,9 @@
       if (bomber) {
         if ((c.fuse -= dt) <= 0) {
           const x = c.x, y = c.y;
-          cloneExplode(x, y, 1);
-          if (hasMod(p, 'clone', 'stable')) c.fuse = 2; // Emotionally Stable keeps its own 2-second rhythm
+          const stable = hasMod(p, 'clone', 'stable');
+          cloneExplode(x, y, stable ? 0.6 : 1);
+          if (stable) c.fuse = 1.5; // Emotionally Stable: keeps pulsing every 1.5 s instead of despawning
           else {
             c.dead = true; c.respawn = cloneRespawn(p);
             if (hasMod(p, 'clone', 'lingering')) { later(0.6, () => cloneExplode(x, y, 0.5)); later(1.2, () => cloneExplode(x, y, 1.5)); }
