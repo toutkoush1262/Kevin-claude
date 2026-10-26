@@ -302,13 +302,13 @@
     bbb: { id: 'splitreturn', name: 'Split Return', desc: 'At the turnaround each Shroomerang splits into 2 that curve back on different paths (60% damage each).' },
   };
   MOD_TREES.clone = {
-    a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 5 seconds, dealing damage equal to half your max HP in a large area. Respawns every 10 seconds.' },
-    aa: { id: 'extratrauma', name: 'Extra Traumatic', desc: 'Clones explode after 2 seconds and respawn twice as fast.' },
+    a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 2 seconds, dealing damage equal to half your max HP in a large area. Respawns every 5 seconds.' },
+    aa: { id: 'extratrauma', name: 'Extra Traumatic', desc: 'Clones explode after 1 second and respawn after 2.' },
     aaa: { id: 'stable', name: 'Emotionally Stable', desc: 'Clones explode every 2 seconds and no longer despawn after exploding.' },
     aab: { id: 'lingering', name: 'Lingering Trauma', desc: 'The explosion area detonates two more times after the clone dies: first for 50% damage, then for 150%.' },
     ab: { id: 'abandon', name: 'Abandonment Issues', desc: 'Your clone runs toward the strongest enemy when it spawns.' },
-    aba: { id: 'runaway', name: 'Runaway', desc: 'Your clone moves twice as fast.' },
-    abb: { id: 'walkaway', name: 'Walkaway', desc: 'Your clone moves at 50% speed but deals double damage.' },
+    aba: { id: 'runaway', name: 'Runaway', desc: 'Spawn two additional clones, each chasing a different strong enemy. Your clones move twice as fast.' },
+    abb: { id: 'walkaway', name: 'Walkaway', desc: 'Your clone moves at 50% speed but deals double damage in a much larger area.' },
     b: { id: 'extraclone', name: 'Extra Propagation', desc: 'Spawn a second clone behind you.' },
     ba: { id: 'nation', name: 'Propagation Nation', desc: 'Spawn a third clone behind you.' },
     baa: { id: 'colony', name: 'Establish Colony', desc: 'All clones attack at full strength.' },
@@ -813,26 +813,31 @@
   }
   function spawnClone(c) {
     const p = S.player;
-    c.dead = false; c.x = p.x - p.face * 30; c.y = p.y + 10;
-    c.fuse = (hasMod(p, 'clone', 'extratrauma') ? 2 : 5) * (aug('clone', 'haste') ? 0.75 : 1);
+    c.dead = false; c.x = p.x - p.face * 30; c.y = p.y + 10 + c.i * 24;
+    c.fuse = cloneFuse(p);
     c.target = null;
-    if (hasMod(p, 'clone', 'abandon')) c.target = S.enemies.reduce((best, e) => (!best || e.hp > best.hp ? e : best), null);
+    if (hasMod(p, 'clone', 'abandon')) c.target = strongest(c.i);
     S.shockwaves.push({ x: c.x, y: c.y, r: 0, max: 40, life: 0.4, color: '#f3c1e8' });
   }
   function cloneExplode(x, y, mult) {
-    const p = S.player, rad = 150 * (aug('clone', 'kin') ? Math.sqrt(1.5) : 1); // Kinship: +50% area
+    const p = S.player, rad = 150 * (aug('clone', 'kin') ? Math.sqrt(1.5) : 1) * (hasMod(p, 'clone', 'walkaway') ? 1.75 : 1); // Kinship: +50% area; Walkaway: ~3x area
     const dmg = p.maxHp * 0.5 * p.might * (1 + 0.02 * (p.w.clone.level - 1)) * (hasMod(p, 'clone', 'walkaway') ? 2 : 1) * mult * (aug('clone', 'strongspawn') ? 1.4 : 1);
     for (const e of S.enemies) if (dist2(e, { x, y }) < (rad + e.r) ** 2) damageEnemy(e, dmg, (e.x - x) * 2, (e.y - y) * 2);
     S.shockwaves.push({ x, y, r: 0, max: rad, life: 0.6, color: '#ff8a5c' }, { x, y, r: -30, max: rad, life: 0.7, color: '#ffd84a' });
     for (let i = 0; i < 30; i++) { const a = Math.random() * 6.28, sp = rand(100, 320); S.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), color: i % 2 ? '#ff8a5c' : '#f3e6c8' }); }
   }
+  // Transplant Trauma timings (seconds): fuse before exploding and wait before respawning
+  const cloneFuse = p => (hasMod(p, 'clone', 'extratrauma') ? 1 : 2) * (aug('clone', 'haste') ? 0.75 : 1);
+  const cloneRespawn = p => (hasMod(p, 'clone', 'extratrauma') ? 2 : 5) * (aug('clone', 'haste') ? 0.75 : 1);
+  // The i-th strongest enemy, so Runaway's extra clones each chase a different one
+  const strongest = i => S.enemies.slice().sort((a, b) => b.hp - a.hp)[Math.min(i, S.enemies.length - 1)] || null;
   const aliveClones = () => S.clones.filter(c => !c.dead).length;
 
   function updateClones(dt) {
     const p = S.player, lvl = p.w.clone.level;
     if (lvl <= 0) { S.clones = []; return; }
     const bomber = hasMod(p, 'clone', 'trauma');
-    const want = bomber ? 1 : 1 + (hasMod(p, 'clone', 'extraclone') ? 1 : 0) + (hasMod(p, 'clone', 'nation') ? 1 : 0) + (aug('clone', 'kin') ? 1 : 0);
+    const want = bomber ? 1 + (hasMod(p, 'clone', 'runaway') ? 2 : 0) : 1 + (hasMod(p, 'clone', 'extraclone') ? 1 : 0) + (hasMod(p, 'clone', 'nation') ? 1 : 0) + (aug('clone', 'kin') ? 1 : 0);
     while (S.clones.length < want) { const c = newClone(S.clones.length); S.clones.push(c); spawnClone(c); }
     S.clones.length = want;
     const fun = hasMod(p, 'clone', 'funguys');
@@ -840,7 +845,7 @@
     for (const c of S.clones) {
       if (c.dead) { if ((c.respawn -= dt) <= 0) spawnClone(c); continue; }
       // Movement: chase the strongest enemy (Abandonment Issues), otherwise trail behind you in a fan
-      if (c.target && c.target.hp <= 0) c.target = S.enemies.reduce((best, e) => (!best || e.hp > best.hp ? e : best), null);
+      if (c.target && c.target.hp <= 0) c.target = strongest(c.i);
       let tx, ty;
       if (c.target) { tx = c.target.x; ty = c.target.y; }
       else { const side = (c.i - (S.clones.length - 1) / 2) * 34; tx = p.x - p.face * 38 - Math.abs(side) * 0.3 * p.face; ty = p.y + side; }
@@ -854,9 +859,9 @@
         if ((c.fuse -= dt) <= 0) {
           const x = c.x, y = c.y;
           cloneExplode(x, y, 1);
-          if (hasMod(p, 'clone', 'stable')) c.fuse = 2;
+          if (hasMod(p, 'clone', 'stable')) c.fuse = 2; // Emotionally Stable keeps its own 2-second rhythm
           else {
-            c.dead = true; c.respawn = (hasMod(p, 'clone', 'extratrauma') ? 5 : 10) * (aug('clone', 'haste') ? 0.75 : 1);
+            c.dead = true; c.respawn = cloneRespawn(p);
             if (hasMod(p, 'clone', 'lingering')) { later(0.6, () => cloneExplode(x, y, 0.5)); later(1.2, () => cloneExplode(x, y, 1.5)); }
           }
         }
@@ -2151,7 +2156,7 @@
         const w = p.w[u.id];
         let frac = 0;
         if (w && w.cdMax && w.cd > 0) frac = Math.min(1, w.cd / w.cdMax);
-        if (u.id === 'clone') { const c = S.clones[0]; if (c && c.dead && hasMod(p, 'clone', 'trauma')) frac = Math.min(1, c.respawn / (hasMod(p, 'clone', 'extratrauma') ? 5 : 10)); }
+        if (u.id === 'clone') { const c = S.clones[0]; if (c && c.dead && hasMod(p, 'clone', 'trauma')) frac = Math.min(1, c.respawn / cloneRespawn(p)); }
         if (frac > 0.02) {
           ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, size, size, 7); ctx.clip();
           ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
