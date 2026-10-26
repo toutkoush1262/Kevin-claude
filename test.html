@@ -302,7 +302,7 @@
     bbb: { id: 'splitreturn', name: 'Split Return', desc: 'At the turnaround each Shroomerang splits into 2 that curve back on different paths (60% damage each).' },
   };
   MOD_TREES.clone = {
-    a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 2 seconds in a large area, dealing damage that grows with Propagate\'s level, plus half your max HP. Respawns every 5 seconds.' },
+    a: { id: 'trauma', name: 'Transplant Trauma', desc: 'Your clone no longer attacks. Instead it explodes after 2 seconds in a huge blast, dealing damage that grows with Propagate\'s level, plus half your max HP. Respawns every 5 seconds.' },
     aa: { id: 'extratrauma', name: 'Extra Traumatic', desc: 'Clones explode after 1 second and respawn after 2.' },
     aaa: { id: 'stable', name: 'Emotionally Stable', desc: 'Clones never despawn: they pulse every 1.5 seconds for 60% damage, guarding you as they follow.' },
     aab: { id: 'lingering', name: 'Lingering Trauma', desc: 'The explosion area detonates two more times after the clone dies: first for 50% damage, then for 150%.' },
@@ -819,14 +819,16 @@
     if (hasMod(p, 'clone', 'abandon')) c.target = strongest(c.i);
     S.shockwaves.push({ x: c.x, y: c.y, r: 0, max: 40, life: 0.4, color: '#f3c1e8' });
   }
+  const CLONE_BLAST = 480; // blast radius: covers a whole phone screen
   function cloneExplode(x, y, mult) {
-    const p = S.player, rad = 150 * (aug('clone', 'kin') ? Math.sqrt(1.5) : 1) * (hasMod(p, 'clone', 'walkaway') ? 1.75 : 1); // Kinship: +50% area; Walkaway: ~3x area
+    const p = S.player, rad = CLONE_BLAST * (aug('clone', 'kin') ? Math.sqrt(1.5) : 1) * (hasMod(p, 'clone', 'walkaway') ? 1.75 : 1); // Kinship: +50% area; Walkaway: ~3x area
     // Grows with Propagate's level and Might, plus half your max HP (a bonus for tanky builds)
     const dmg = ((100 + 40 * p.w.clone.level) * p.might + p.maxHp * 0.5) * (hasMod(p, 'clone', 'walkaway') ? 2 : 1) * mult * (aug('clone', 'strongspawn') ? 1.4 : 1);
     const hunter = hasMod(p, 'clone', 'abandon'); // Abandonment Issues: double damage to elites and the boss
     for (const e of S.enemies) if (dist2(e, { x, y }) < (rad + e.r) ** 2) damageEnemy(e, dmg * (hunter && (e.elite || e.boss) ? 2 : 1), (e.x - x) * 2, (e.y - y) * 2);
     S.shockwaves.push({ x, y, r: 0, max: rad, life: 0.6, color: '#ff8a5c' }, { x, y, r: -30, max: rad, life: 0.7, color: '#ffd84a' });
-    for (let i = 0; i < 30; i++) { const a = Math.random() * 6.28, sp = rand(100, 320); S.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), color: i % 2 ? '#ff8a5c' : '#f3e6c8' }); }
+    if (mult >= 1 && !hasMod(p, 'clone', 'stable')) S.flash = { color: '#ff8a5c', life: 0.25 }; // not for Stable's constant pulses
+    for (let i = 0; i < 40; i++) { const a = Math.random() * 6.28, sp = rand(200, 700); S.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), color: i % 2 ? '#ff8a5c' : '#f3e6c8' }); }
   }
   // Transplant Trauma timings (seconds): fuse before exploding and wait before respawning
   const cloneFuse = p => (hasMod(p, 'clone', 'extratrauma') ? 1 : 2) * (aug('clone', 'haste') ? 0.75 : 1);
