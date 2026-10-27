@@ -313,8 +313,8 @@
     ab: { id: 'abandon', name: 'Abandonment Issues', desc: 'Your clone runs toward the strongest enemy when it spawns, and its blasts deal double damage to elites and the boss.' },
     aba: { id: 'runaway', name: 'Runaway', desc: 'Spawn two additional clones, each chasing a different strong enemy. Your clones move twice as fast.' },
     abb: { id: 'walkaway', name: 'Walkaway', desc: 'Your clone moves at 50% speed but deals double damage in a much larger area.' },
-    b: { id: 'extraclone', name: 'Extra Propagation', desc: 'Spawn a second clone behind you.' },
-    ba: { id: 'nation', name: 'Propagation Nation', desc: 'Spawn a third clone behind you.' },
+    b: { id: 'extraclone', name: 'Extra Propagation', desc: 'Spawn a second clone behind you. It copies a different skill of your choice.' },
+    ba: { id: 'nation', name: 'Propagation Nation', desc: 'Spawn a third clone behind you. It copies another different skill of your choice.' },
     baa: { id: 'colony', name: 'Establish Colony', desc: 'All clones attack at full strength.' },
     bab: { id: 'funguys', name: 'Fun Guys', desc: 'Clones attack twice as often, but use your skills with randomly picked modifiers.' },
     bb: { id: 'shielding', name: 'Shielding Shrooms', desc: 'Each clone gives a 10% chance to block any instance of damage.' },
@@ -342,8 +342,8 @@
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
       type: 'active', apply: p => { p.w.thorn.level++; } },
     // Propagate isn't picked or slotted: every run gets it at player level 10 (see PROPAGATE_AT)
-    { id: 'clone', name: 'Propagate', auto: true, desc: 'Grows a clone of you that follows you around and uses your skills at reduced strength.', max: SKILL_MAX,
-      info: p => { const l = (p.upgrades.clone || 0) + 1; return hasMod(p, 'clone', 'trauma') ? `blast ${Math.round((85 + 35 * l) * p.might + p.maxHp * 0.5)} damage` : `${Math.round(cloneEff(l) * 100)}% strength`; },
+    { id: 'clone', name: 'Propagate', auto: true, desc: 'Grows a clone of you that follows you around and copies one skill from your bar, with all your upgrades, at half strength.', max: SKILL_MAX,
+      info: p => { const l = (p.upgrades.clone || 0) + 1; return hasMod(p, 'clone', 'trauma') ? `blast ${Math.round((85 + 35 * l) * p.might + p.maxHp * 0.5)} damage` : `copies ${(p.cloneSkills || []).map(k => SKILL_NAMES[k]).join(', ') || 'a skill you choose'} at 50% strength`; },
       type: 'active', apply: p => { p.w.clone.level++; } },
     { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
       type: 'passive', apply: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); } },
@@ -370,7 +370,7 @@
       t: 0, kills: 0, running: true, paused: false, spawnAcc: 0,
       player: {
         x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0, xpMult: 1, crystalLuck: 1, slots: { ...SLOT_START }, aug: {},
-        level: 1, xp: 0, xpNext: 5, hurt: 0, face: 1, speedBoost: 0, upgrades: {}, mods: {}, crystals: { blue: 0, green: 0, red: 0, purple: 0 },
+        level: 1, xp: 0, xpNext: 5, hurt: 0, cloneSkills: [], face: 1, speedBoost: 0, upgrades: {}, mods: {}, crystals: { blue: 0, green: 0, red: 0, purple: 0 },
         w: {
           bolt: { level: 1, cd: 0 },
           orbit: { level: 0, angle: 0, hitCd: new Map() },
@@ -811,7 +811,7 @@
 
   // ---------- Propagate: clones ----------
   const ACTIVE = ['bolt', 'orbit', 'aura', 'thorn', 'tendril', 'boomer'];
-  const cloneEff = lvl => 0.5 + 0.02 * Math.max(0, lvl - 1); // 50% at level 1, +2% per level
+  const CLONE_POWER = 0.5; // attacking clones cast their copied skill at half strength
   // A random modifier path for each skill, as deep as the player's own path (Fun Guys)
   function randomMods(p) {
     const mods = {};
@@ -885,14 +885,14 @@
         }
         continue;
       }
-      // Attacking clone: mirror your skill levels; use your modifiers, or random ones with Fun Guys
-      for (const k of ACTIVE) c.w[k].level = p.w[k].level;
+      // Attacking clone: casts the one skill it copied, at your level; with your modifiers, or random ones with Fun Guys
+      for (const k of ACTIVE) c.w[k].level = p.cloneSkills[c.i] === k ? p.w[k].level : 0; // only its copied skill
       if (fun) {
         const sig = ACTIVE.map(k => (p.mods[k] || []).length).join();
         if (c.funSig !== sig) { c.funSig = sig; c.funMods = randomMods(p); }
         c.mods = c.funMods;
       } else c.mods = p.mods;
-      c.might = p.might * (hasMod(p, 'clone', 'colony') ? 1 : cloneEff(lvl));
+      c.might = p.might * (hasMod(p, 'clone', 'colony') ? 1 : CLONE_POWER);
       updateWeapons(c, fun ? dt * 2 : dt);
     }
   }
@@ -1198,9 +1198,37 @@
       logEvent('pick', { skill: 'clone', level: step });
       S.banner = { txt: first ? '🍄 Propagate! A clone of you sprouts 🍄' : `🍄 Propagate grows to level ${step} 🍄`, life: 3, color: '#f3c1e8' };
       const tier = (p.mods.clone || []).length;
-      if (!first && tier < 3) return showModifierChoice('clone', tier, showLevelCards);
+      if (!first && tier < 3) return showModifierChoice('clone', tier, () => cloneSkillChoices(showLevelCards));
+      if (first) return cloneSkillChoices(showLevelCards);
     }
     showLevelCards();
+  }
+  // Each attacking clone copies one active skill from your bar; ask for any clone that doesn't have one yet
+  function cloneSkillChoices(onDone) {
+    const p = S.player;
+    const attackers = hasMod(p, 'clone', 'trauma') ? 0 : 1 + (hasMod(p, 'clone', 'extraclone') ? 1 : 0) + (hasMod(p, 'clone', 'nation') ? 1 : 0);
+    if (p.cloneSkills.length >= attackers) return onDone();
+    const bar = UPGRADES.filter(u => u.type === 'active' && !u.auto && p.w[u.id] && p.w[u.id].level > 0);
+    let opts = bar.filter(u => !p.cloneSkills.includes(u.id));
+    if (!opts.length) opts = bar; // every skill on your bar is already copied: allow a repeat
+    const n = p.cloneSkills.length;
+    document.getElementById('slotInfo').textContent = '';
+    document.getElementById('levelTitle').textContent = n ? `A new clone sprouts! Choose a different skill for it to copy` : 'Your clone sprouts! Choose a skill for it to copy';
+    const cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    for (const u of opts) {
+      const mods = (p.mods[u.id] || []).map(c => MOD_TREES[u.id][c].name), augs = (p.aug[u.id] || []).length;
+      const div = document.createElement('div');
+      div.className = 'card mod';
+      div.innerHTML = `<b>${u.name}</b><span>Your clone casts ${u.name} at level ${p.w[u.id].level}${mods.length ? ' with ' + mods.join(', ') : ''}${augs ? ` and ${augs} augment${augs > 1 ? 's' : ''}` : ''}, at 50% strength.</span><small>Keeps up as you level ${u.name}</small>`;
+      div.onclick = () => {
+        p.cloneSkills.push(u.id);
+        logEvent('clone-skill', { clone: n + 1, skill: u.id });
+        cloneSkillChoices(onDone);
+      };
+      cards.appendChild(div);
+    }
+    document.getElementById('levelup').classList.remove('hidden');
   }
   // Propagate's level at each player-level milestone; 20, 30 and 40 also pick its next modifier
   const PROPAGATE_AT = { 10: 4, 20: 8, 30: 12, 40: 15 };
@@ -1974,6 +2002,7 @@
     drawPlayer({ x: c.x, y: c.y, face: c.face, moving: c.moving, hurt: 0, speedBoost: 0, alpha: 0.78, cap: bomber ? '#ff6b3d' : '#d968c4' });
     ctx.restore();
     if (bomber) { ctx.fillStyle = '#ffe08a'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText(Math.ceil(c.fuse), c.x, c.y - 30); }
+    else if (S.player.cloneSkills[c.i]) drawSkillIcon(S.player.cloneSkills[c.i], c.x, c.y - 36, 18); // which skill it copied
   }
 
   function drawPlayer(p) {
