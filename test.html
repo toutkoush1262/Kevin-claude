@@ -341,7 +341,8 @@
       type: 'active', apply: p => { p.w.boomer.level++; } },
     { id: 'thorn', name: 'Thorn Nova', desc: 'Periodically bursts thorns in all directions.', max: SKILL_MAX,
       type: 'active', apply: p => { p.w.thorn.level++; } },
-    { id: 'clone', name: 'Propagate', desc: 'Grows a clone of you that follows you around and uses your skills at reduced strength.', max: SKILL_MAX,
+    // Propagate isn't picked or slotted: every run gets it at player level 10 (see PROPAGATE_AT)
+    { id: 'clone', name: 'Propagate', auto: true, desc: 'Grows a clone of you that follows you around and uses your skills at reduced strength.', max: SKILL_MAX,
       info: p => { const l = (p.upgrades.clone || 0) + 1; return hasMod(p, 'clone', 'trauma') ? `blast ${Math.round((85 + 35 * l) * p.might + p.maxHp * 0.5)} damage` : `${Math.round(cloneEff(l) * 100)}% strength`; },
       type: 'active', apply: p => { p.w.clone.level++; } },
     { id: 'hp', name: 'Thick Stem', desc: '+20 max health and heal 20.', max: 6,
@@ -901,7 +902,7 @@
   // (purple for active slots, red for passive slots). Prices rise with each slot bought.
   const SLOT_START = { active: 4, passive: 4 };
   const SLOT_COST = { active: { kind: 'purple', prices: [2, 3, 4] }, passive: { kind: 'red', prices: [2, 3, 4] } };
-  const slotsUsed = type => UPGRADES.filter(u => u.type === type && (S.player.upgrades[u.id] || 0) > 0).length;
+  const slotsUsed = type => UPGRADES.filter(u => u.type === type && !u.auto && (S.player.upgrades[u.id] || 0) > 0).length;
   const slotsMax = type => SLOT_START[type] + SLOT_COST[type].prices.length;
   const nextSlotPrice = type => SLOT_COST[type].prices[S.player.slots[type] - SLOT_START[type]]; // undefined once all are bought
   const canLearn = u => (S.player.upgrades[u.id] || 0) > 0 || slotsUsed(u.type) < S.player.slots[u.type];
@@ -1190,8 +1191,23 @@
     if (healed > 0) { p.hp += healed; S.texts.push({ x: p.x, y: p.y - 40, txt: `+${Math.round(healed)} HP`, life: 1, color: '#7be36b' }); }
     if (p.level % 10 === 0) spawnMerchant();
     S.paused = true;
+    const step = PROPAGATE_AT[p.level];
+    if (step !== undefined && p.w.clone.level < step) { // Propagate milestone: everyone gets it, its level jumps
+      const first = p.w.clone.level === 0;
+      p.w.clone.level = p.upgrades.clone = step;
+      logEvent('pick', { skill: 'clone', level: step });
+      S.banner = { txt: first ? '🍄 Propagate! A clone of you sprouts 🍄' : `🍄 Propagate grows to level ${step} 🍄`, life: 3, color: '#f3c1e8' };
+      const tier = (p.mods.clone || []).length;
+      if (!first && tier < 3) return showModifierChoice('clone', tier, showLevelCards);
+    }
+    showLevelCards();
+  }
+  // Propagate's level at each player-level milestone; 20, 30 and 40 also pick its next modifier
+  const PROPAGATE_AT = { 10: 4, 20: 8, 30: 12, 40: 15 };
+  function showLevelCards() {
+    const p = S.player;
     document.getElementById('levelTitle').textContent = 'Level up! Choose a blessing';
-    const pool = UPGRADES.filter(u => (p.upgrades[u.id] || 0) < u.max && canLearn(u));
+    const pool = UPGRADES.filter(u => !u.auto && (p.upgrades[u.id] || 0) < u.max && canLearn(u));
     document.getElementById('slotInfo').textContent = slotSummary();
     const picks = [];
     while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
@@ -1335,7 +1351,7 @@
       <div class="shopmsg">${msg}</div>
       <div class="ssec">Skill slots</div>${['active', 'passive'].map(slotRow).join('')}
 
-      <div class="ssec">Active skills</div>${UPGRADES.filter(u => u.type === 'active').map(row).join('')}
+      <div class="ssec">Active skills</div>${UPGRADES.filter(u => u.type === 'active' && !u.auto).map(row).join('')}
       <div class="ssec">Passive skills</div>${UPGRADES.filter(u => u.type === 'passive').map(row).join('')}`;
   }
 
@@ -2227,14 +2243,16 @@
     const rows = [['active', small ? 38 : 46], ['passive', small ? 28 : 32]];
     let y = H - 10;
     for (const [type, size] of [...rows].reverse()) {
-      const owned = UPGRADES.filter(u => u.type === type && (p.upgrades[u.id] || 0) > 0);
-      const slots = p.slots[type], gap = 5, total = slots * size + (slots - 1) * gap;
+      const owned = UPGRADES.filter(u => u.type === type && !u.auto && (p.upgrades[u.id] || 0) > 0);
+      const extra = type === 'active' && p.w.clone.level > 0 ? 1 : 0; // Propagate's own box, outside the slots
+      if (extra) owned[p.slots[type]] = UPGRADES.find(u => u.id === 'clone');
+      const slots = p.slots[type] + extra, gap = 5, total = slots * size + (slots - 1) * gap;
       let x = W / 2 - total / 2;
       y -= size;
       for (let i = 0; i < slots; i++, x += size + gap) {
         const u = owned[i], cx = x + size / 2, cy = y + size / 2;
         ctx.fillStyle = u ? 'rgba(14, 24, 18, 0.82)' : 'rgba(14, 24, 18, 0.35)';
-        ctx.strokeStyle = u ? (type === 'active' ? '#4da6ff' : '#5ee07a') : 'rgba(255,255,255,0.18)';
+        ctx.strokeStyle = u ? (u.auto ? '#f3c1e8' : type === 'active' ? '#4da6ff' : '#5ee07a') : 'rgba(255,255,255,0.18)';
         ctx.lineWidth = u ? 1.5 : 1;
         ctx.beginPath(); ctx.roundRect(x, y, size, size, 7); ctx.fill(); ctx.stroke();
         if (!u) continue;
@@ -2410,7 +2428,7 @@
     const b = e.target.closest('button[data-test]'); if (!b) return;
     const p = S.player, t = b.dataset.test;
     if (t === 'max-bolt') testMsg.textContent = maxSkill('bolt') + ' is now level 15 (random modifiers).';
-    if (t === 'max-random') { const ids = UPGRADES.filter(u => u.type === 'active' && (p.upgrades[u.id] || 0) < 15).map(u => u.id); testMsg.textContent = ids.length ? maxSkill(ids[Math.floor(Math.random() * ids.length)]) + ' is now level 15.' : 'Every active skill is already 15.'; }
+    if (t === 'max-random') { const ids = UPGRADES.filter(u => u.type === 'active' && !u.auto && (p.upgrades[u.id] || 0) < 15).map(u => u.id); testMsg.textContent = ids.length ? maxSkill(ids[Math.floor(Math.random() * ids.length)]) + ' is now level 15.' : 'Every active skill is already 15.'; }
     if (t === 'max-passives') { const done = UPGRADES.filter(u => u.type === 'passive' && p.upgrades[u.id] > 0).map(u => maxSkill(u.id)); testMsg.textContent = done.length ? 'Maxed: ' + done.join(', ') : 'Learn a passive first.'; }
     if (t === 'crystals') { p.crystals.blue += 100; p.crystals.green += 100; testMsg.textContent = '+100 blue and green crystals.'; }
     if (t === 'shop') { S.merchant = null; S.auntie = null; spawnMerchant(); testMsg.textContent = auntieUnlocked() ? 'Old Toadley and Auntie Amanita are nearby.' : 'Old Toadley is nearby. Auntie needs a level 15 skill first.'; }
