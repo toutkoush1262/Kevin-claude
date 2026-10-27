@@ -1182,10 +1182,12 @@
     if (p.xp >= p.xpNext) levelUp();
   }
 
+  const HP_PER_LEVEL = 2;
   function levelUp() {
     const p = S.player;
     p.level++; p.xp -= p.xpNext; p.xpNext = xpToNext(p.level);
     if (S.log) S.log.levelTimes.push(Math.round(S.t));
+    p.maxHp += HP_PER_LEVEL; p.hp += HP_PER_LEVEL; // a little flat health every level
     // Every level-up heals 5% of max HP
     const healed = Math.min(p.maxHp - p.hp, p.maxHp * (aug('regen', 'lifeleaf') ? 0.15 : 0.05));
     if (healed > 0) { p.hp += healed; S.texts.push({ x: p.x, y: p.y - 40, txt: `+${Math.round(healed)} HP`, life: 1, color: '#7be36b' }); }
