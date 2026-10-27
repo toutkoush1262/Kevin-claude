@@ -124,6 +124,7 @@
       <button data-test="shop">Summon shop (and Auntie)</button>
       <button data-test="t10">Jump to 10:00 (elites)</button>
       <button data-test="t1950">Jump to 19:50 (boss)</button>
+      <button data-test="shieldshroom">Spawn Mushroom Shield</button>
       <button data-test="god">Invincible: off</button>
     </div>
     <p id="testMsg" class="shopmsg"></p>
@@ -384,7 +385,7 @@
       enemies: [], bullets: [], rangs: [], tendrils: [], delayed: [], clones: [], hazards: [], auntie: null, boss: null, bossDefeated: false, eliteAt: ELITE_FROM + rand(0, 15), snailAt: 0, crystals: [], merchant: null, shopCycle: 0, cycleDrops: 0, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
       shroomTimers: { red: rand(8, 14), blue: rand(16, 24), gold: rand(26, 36) },
       forage: { red: { count: 0, level: 0, picks: {} }, blue: { count: 0, level: 0, picks: {} }, gold: { count: 0, level: 0, picks: {} } },
-      pendingForage: [],
+      pendingForage: [], trees: [], shieldTimer: rand(90, 200),
     };
   }
 
@@ -438,8 +439,35 @@
     { id: 'goldentouch', type: 'gold', name: 'Golden Touch', desc: () => 'Each golden mushroom you collect permanently gives +2% XP.' },
     { id: 'gilded', type: 'gold', name: 'Gilded Haze', max: 4, desc: () => 'Spores pulled in by a golden mushroom have a 20% chance to upgrade a color (green → pink → golden).' },
   ];
-  const forageStacks = (t, id) => S.forage[t].picks[id] || 0;
+  const forageStacks = (t, id) => (S.forage[t] && S.forage[t].picks[id]) || 0; // the Mushroom Shield has no Forage track
+  // Mushroom Shield: a rare mushroom (1/5 as common as the others). Eating it grows a shield tree where you stand that
+  // fires rings of mushrooms, and wraps you in a shield that blocks all damage for 10 seconds.
+  const SHIELD_SHROOM = { color: '#7fe8ff', interval: [180, 270], shield: 10, treeLife: 10, grow: 0.6, novaEvery: 1.2, novaCount: 16, dmg: 20 };
   const forageFreq = t => (1 + 0.35 * forageStacks(t, 'bountiful')) / (1 + S.t / 300); // ~5x rarer by 20 minutes
+
+  function collectShield(m) {
+    const p = S.player;
+    p.shield = SHIELD_SHROOM.shield;
+    S.trees.push({ x: m.x, y: m.y, age: 0, life: SHIELD_SHROOM.treeLife, cd: SHIELD_SHROOM.grow });
+    S.banner = { txt: '🛡️ Mushroom Shield! 🛡️', life: 2.5, color: SHIELD_SHROOM.color };
+    S.flash = { color: SHIELD_SHROOM.color, life: 0.4 };
+    S.shockwaves.push({ x: p.x, y: p.y, r: 0, max: 90, life: 0.5, color: SHIELD_SHROOM.color });
+    logEvent('mushroom-shield');
+  }
+  // The shield tree fires a ring of mushrooms every 1.2 s; damage keeps pace with enemy health
+  function updateTrees(dt) {
+    for (const tr of S.trees) {
+      tr.age += dt; tr.life -= dt;
+      if ((tr.cd -= dt) > 0 || tr.life <= 0) continue;
+      tr.cd = SHIELD_SHROOM.novaEvery;
+      const full = SHIELD_SHROOM.novaCount, n = budgetCount(full), dmg = SHIELD_SHROOM.dmg * hpScale(S.t) * (full / n), off = Math.random();
+      for (let i = 0; i < n; i++) {
+        const a = ((i + off) / n) * Math.PI * 2;
+        S.bullets.push({ x: tr.x, y: tr.y - 30, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, r: 6, dmg, life: 1.6, pierce: 3, kind: 'shieldcap', hit: new Set() });
+      }
+    }
+    S.trees = S.trees.filter(tr => tr.life > 0);
+  }
 
   function spawnShroom(kind, x, y) {
     const p = S.player, ang = Math.random() * Math.PI * 2, d = rand(150, 400);
@@ -447,6 +475,7 @@
   }
 
   function collectShroom(m) {
+    if (m.kind === 'shield') return collectShield(m);
     const p = S.player, t = m.kind, st = id => forageStacks(t, id), say = (txt, color) => S.texts.push({ x: p.x, y: p.y - 30, txt, life: 1, color });
     if (t === 'red') {
       if (st('hearty')) { p.maxHp += 5 * st('hearty'); p.hp += 5 * st('hearty'); }
@@ -954,6 +983,11 @@
   const LAST_GASP = { every: 60, invuln: 1.5 }; // seconds between Last Gasps, invulnerability after one
   function hurtPlayer(dmg, words = ['CHOMP!', 'NOM!', 'MUNCH!', 'Yum!'], source = 'bite') {
     const p = S.player;
+    if (p.shield > 0) { // Mushroom Shield blocks everything
+      p.hurt = 0.3;
+      if (S.texts.length < MAX_TEXTS) S.texts.push({ x: p.x, y: p.y - 30, txt: 'Shielded!', life: 0.6, color: SHIELD_SHROOM.color });
+      return 'blocked';
+    }
     const block = aliveClones() * (hasMod(p, 'clone', 'bulletproof') ? 0.2 : hasMod(p, 'clone', 'shielding') ? 0.1 : 0);
     p.hurt = aug('speed', 'slippery') ? 0.9 : 0.5;
     if (Math.random() < block) { // Shielding Shrooms
@@ -1586,6 +1620,7 @@
     const rate = (0.8 + S.t / 25) * (0.85 + 0.15 * Math.min(1, S.t / 300)) * (S.boss ? 0.35 : 1); // 15% fewer at the start, full rate by 5:00
     S.spawnAcc += rate * dt;
     while (S.spawnAcc >= 1 && S.enemies.length < 400) { S.spawnAcc--; const type = spawnTable(S.t); if (type) spawnEnemy(type); }
+    if ((S.shieldTimer -= dt / (1 + S.t / 300)) <= 0) { S.shieldTimer = rand(...SHIELD_SHROOM.interval); spawnShroom('shield'); }
     for (const t in SHROOM_TYPES) {
       if ((S.shroomTimers[t] -= dt * forageFreq(t)) <= 0) { S.shroomTimers[t] = rand(...SHROOM_TYPES[t].interval); spawnShroom(t); }
     }
@@ -1716,6 +1751,8 @@
     }
     S.shrooms = S.shrooms.filter(m => m.life > 0);
     if (p.thickSkin > 0) p.thickSkin -= dt;
+    if (p.shield > 0) p.shield -= dt;
+    updateTrees(dt);
     if (S.pendingForage.length) return showForageChoice(S.pendingForage.shift());
 
     // FX
@@ -2007,11 +2044,21 @@
     else if (S.player.cloneSkills[c.i]) drawSkillIcon(S.player.cloneSkills[c.i], c.x, c.y - 36, 18); // which skill it copied
   }
 
+  function drawShieldTree(tr) {
+    const g = Math.min(1, tr.age / SHIELD_SHROOM.grow), fade = Math.min(1, tr.life / 0.6), sway = Math.sin(S.t * 2) * 2;
+    ctx.save(); ctx.globalAlpha = fade; ctx.translate(tr.x, tr.y); ctx.scale(g, g);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 4, 26, 7, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#8a6a4a'; ctx.beginPath(); ctx.moveTo(-7, 4); ctx.lineTo(-4 + sway, -36); ctx.lineTo(4 + sway, -36); ctx.lineTo(7, 4); ctx.fill(); // trunk
+    ctx.strokeStyle = '#8a6a4a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(sway, -20); ctx.lineTo(-18 + sway, -34); ctx.moveTo(sway, -24); ctx.lineTo(18 + sway, -38); ctx.stroke();
+    drawMushroom(-18 + sway, -28, 22, SHIELD_SHROOM.color); drawMushroom(18 + sway, -32, 22, SHIELD_SHROOM.color); drawMushroom(sway, -38, 34, '#4fc9e8');
+    ctx.restore();
+  }
+
   function drawPlayer(p) {
     ctx.save(); ctx.translate(p.x, p.y);
     const step = p.moving ? Math.sin(S.t * 14) : 0;
     if (p.alpha) ctx.globalAlpha = p.alpha;
-    if (p.hurt > 0 && Math.floor(p.hurt * 20) % 2) ctx.globalAlpha = 0.4;
+    if (p.hurt > 0 && !(p.shield > 0) && Math.floor(p.hurt * 20) % 2) ctx.globalAlpha = 0.4;
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 16, 13, 4, 0, 0, 7); ctx.fill();
     // little feet
     ctx.fillStyle = '#d9c8a4';
@@ -2023,7 +2070,7 @@
     // face
     const fx = p.face * 2;
     ctx.fillStyle = '#222';
-    if (p.hurt > 0) {
+    if (p.hurt > 0 && !(p.shield > 0)) {
       ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.beginPath();
       ctx.moveTo(fx - 5, 0); ctx.lineTo(fx - 2, 2); ctx.moveTo(fx - 5, 2); ctx.lineTo(fx - 2, 0);
       ctx.moveTo(fx + 2, 0); ctx.lineTo(fx + 5, 2); ctx.moveTo(fx + 2, 2); ctx.lineTo(fx + 5, 0); ctx.stroke();
@@ -2070,7 +2117,11 @@
     // Magic mushrooms
     for (const m of S.shrooms) {
       if (m.life < 5 && Math.floor(m.life * 6) % 2) continue;
-      const col = { red: '#ff4b4b', blue: '#4bb8ff', gold: '#ffd84a' }[m.kind];
+      const col = { red: '#ff4b4b', blue: '#4bb8ff', gold: '#ffd84a', shield: SHIELD_SHROOM.color }[m.kind];
+      if (m.kind === 'shield') { // rare: a slow spinning ring of sparkles
+        ctx.fillStyle = SHIELD_SHROOM.color;
+        for (let i = 0; i < 6; i++) { const a = S.t * 1.5 + i * 1.047; ctx.fillRect(m.x + Math.cos(a) * 22 - 1.5, m.y + Math.sin(a) * 12 - 1.5, 3, 3); }
+      }
       ctx.shadowColor = col; ctx.shadowBlur = 18;
       drawMushroom(m.x, m.y + 8 + Math.sin(S.t * 3) * 2, 22, col);
       ctx.shadowBlur = 0;
@@ -2166,7 +2217,12 @@
     ctx.globalAlpha = 1;
     if (S.merchant) drawMerchant(S.merchant);
     if (S.auntie) drawAuntie(S.auntie);
+    for (const tr of S.trees) drawShieldTree(tr);
     drawPlayer(p);
+    if (p.shield > 0 && !(p.shield < 2 && Math.floor(p.shield * 8) % 2)) { // shield bubble, flickers in its last 2 seconds
+      ctx.fillStyle = 'rgba(127, 232, 255, 0.16)'; ctx.strokeStyle = 'rgba(127, 232, 255, 0.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y - 4, 30 + Math.sin(S.t * 6) * 1.5, 0, 7); ctx.fill(); ctx.stroke();
+    }
 
     for (const c of S.clones) if (!c.dead) drawClone(c);
     // Orbiting mushrooms
@@ -2188,6 +2244,7 @@
     // Bullets
     for (const b of S.bullets) {
       if (!inView(b.x, b.y)) continue;
+      if (b.kind === 'shieldcap') { drawMushroom(b.x, b.y + 4, 13, SHIELD_SHROOM.color); continue; }
       if (b.kind === 'bolt') {
         ctx.fillStyle = 'rgba(176, 102, 255, 0.35)'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, 7); ctx.fill(); // cheap glow
         ctx.fillStyle = '#d9a6ff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
@@ -2397,6 +2454,7 @@
     ctx.fillStyle = frac < 0.35 ? '#ff3b3b' : '#e33'; ctx.fillRect(bx, by, bw * frac, 6);
     let hy = 52;
     if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, hy); hy += 18; }
+    if (p.shield > 0) { ctx.textAlign = 'left'; ctx.fillStyle = SHIELD_SHROOM.color; ctx.fillText(`Shield ${Math.ceil(p.shield)}s`, 12, hy); hy += 18; }
     ctx.textAlign = 'left'; ctx.fillStyle = '#c9a8ff'; ctx.font = '12px system-ui';
     for (const k in p.mods) p.mods[k].forEach(c => { ctx.fillText('✦ ' + MOD_TREES[k][c].name, 12, hy); hy += 16; });
     if (S.paused && !menuOpen()) {
@@ -2462,6 +2520,7 @@
     if (t === 'shop') { S.merchant = null; S.auntie = null; spawnMerchant(); testMsg.textContent = auntieUnlocked() ? 'Old Toadley and Auntie Amanita are nearby.' : 'Old Toadley is nearby. Auntie needs a level 15 skill first.'; }
     if (t === 't10') { S.t = Math.max(S.t, 600); S.eliteAt = S.t + 1; testMsg.textContent = 'Jumped to 10:00. An elite is coming.'; }
     if (t === 't1950') { S.t = Math.max(S.t, 1190); testMsg.textContent = 'Jumped to 19:50. The boss arrives in 10 seconds.'; }
+    if (t === 'shieldshroom') { spawnShroom('shield', p.x + 70, p.y); testMsg.textContent = 'A Mushroom Shield sprouted right next to you.'; }
     if (t === 'god') { p.god = !p.god; b.textContent = 'Invincible: ' + (p.god ? 'on' : 'off'); }
   });
 
