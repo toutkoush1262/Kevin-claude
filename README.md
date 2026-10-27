@@ -32,3 +32,6 @@ Each version is a git tag (`v0.0.1` to `v0.0.4`); check one out to play that bui
 - **Fewer, tougher enemies.** 15% fewer spawns at the start (full rate by 5:00). Slugs thin out from 3:00 and are gone by 10:00, and bats drop to 40% by 10:00, so the mid and late game has fewer enemies that die to anything.
 - **Turbo snails** replace slugs from 10:00: at most 3 at a time, one every 12-20 seconds. Their shell soaks up the first hit of any kind. They brace for about a second (a red lane shows where they'll go), dash about 300 px in a straight line for 1.5x damage, then rest.
 - **Trolls are immune to knockback.**
+- **Clearer damage.** Each hit shows a red damage number and briefly flashes the screen edges red. The health bar is bigger and shows the chunk you just lost fading out. Below 35% health the screen edges pulse red, faster and stronger below 20%.
+- **Last Gasp.** Once a minute, a hit that would kill you leaves you at 1 HP instead, with 1.5 seconds of invulnerability and a moment of slow motion.
+- **Death recap.** The run log keeps the last 10 hits you took (time, source, damage, HP left) and records each Last Gasp.

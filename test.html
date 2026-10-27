@@ -919,7 +919,7 @@
     S.log = {
       id: 'run-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e4).toString(36),
       version: GAME_VERSION, startedAt: new Date().toISOString(), screen: { w: W, h: H, touch: matchMedia('(pointer: coarse)').matches },
-      status: 'playing', perMinute: [], levelTimes: [], events: [], damageBy: {}, crystalsGot: { blue: 0, green: 0, red: 0, purple: 0 },
+      status: 'playing', perMinute: [], levelTimes: [], events: [], damageBy: {}, lastHits: [], crystalsGot: { blue: 0, green: 0, red: 0, purple: 0 },
     };
     S.logNextMinute = 60;
   }
@@ -950,6 +950,7 @@
   // ---------- Player damage ----------
   // Every hit on the player goes through here so blocking, Thick Skin and Sacrificial Shrooms apply to bites and boss
   // attacks alike. Returns 'blocked', 'hit' or 'dead'.
+  const LAST_GASP = { every: 60, invuln: 1.5 }; // seconds between Last Gasps, invulnerability after one
   function hurtPlayer(dmg, words = ['CHOMP!', 'NOM!', 'MUNCH!', 'Yum!'], source = 'bite') {
     const p = S.player;
     const block = aliveClones() * (hasMod(p, 'clone', 'bulletproof') ? 0.2 : hasMod(p, 'clone', 'shielding') ? 0.1 : 0);
@@ -960,9 +961,13 @@
       return 'blocked';
     }
     const taken = dmg * (p.thickSkin > 0 ? 1 - 0.2 * forageStacks('red', 'thickskin') : 1) * (aug('hp', 'bark') ? 0.9 : 1);
+    if (!(p.ghostDelay > 0)) p.hpGhost = p.hp; // the bar shows the chunk you just lost fading out
+    p.ghostDelay = 0.5;
     p.hp -= taken;
+    p.hitFlash = 0.3;
     if (S.log) { S.log.damageBy[source] = Math.round((S.log.damageBy[source] || 0) + taken); S.lastHitBy = source; }
     S.texts.push({ x: p.x + rand(-12, 12), y: p.y - 24, txt: words[Math.floor(Math.random() * words.length)], life: 0.8, color: '#ffcf6b' });
+    S.texts.push({ x: p.x + rand(-8, 8), y: p.y - 44, txt: '−' + Math.round(taken), life: 0.9, color: '#ff5a5a' });
     for (let i = 0; i < 5; i++) S.particles.push({ x: p.x, y: p.y - 8, vx: rand(-90, 90), vy: rand(-140, -20), life: 0.4, color: '#efe3c8' });
     if (p.god) p.hp = Math.max(p.hp, 1); // test realm: invincible
     if (p.hp <= 0 && hasMod(p, 'clone', 'sacrifice') && aliveClones()) { // Sacrificial Shrooms
@@ -972,6 +977,13 @@
       cloneExplode(c.x, c.y, 0);
       S.banner = { txt: 'A clone sacrificed itself to save you!', life: 3, color: '#f3c1e8' };
     }
+    if (p.hp <= 0 && S.t >= (p.gaspReady || 0)) { // Last Gasp: once a minute, a killing blow leaves you at 1 HP
+      p.hp = 1; p.hurt = LAST_GASP.invuln; p.gaspReady = S.t + LAST_GASP.every;
+      S.slowmo = 1.2; S.flash = { color: '#ff3030', life: 0.7 };
+      S.banner = { txt: '💀 Last Gasp! Get out of there! 💀', life: 2.5, color: '#ff6b6b' };
+      logEvent('last-gasp', { source, damage: Math.round(taken) });
+    }
+    if (S.log) { S.log.lastHits.push({ t: +S.t.toFixed(1), source, damage: Math.round(taken), hp: Math.round(p.hp) }); if (S.log.lastHits.length > 10) S.log.lastHits.shift(); }
     return p.hp <= 0 ? 'dead' : 'hit';
   }
 
@@ -1513,6 +1525,8 @@
     p.moving = dir.x || dir.y;
     p.speedBoost = Math.max(0, p.speedBoost - dt);
     p.hurt = Math.max(0, p.hurt - dt);
+    if (p.hitFlash > 0) p.hitFlash -= dt;
+    if (p.ghostDelay > 0) p.ghostDelay -= dt; else if (p.hpGhost > p.hp) p.hpGhost = Math.max(p.hp, p.hpGhost - p.maxHp * 0.8 * dt);
     p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
 
     // Spawning: rate ramps up over time
@@ -2320,10 +2334,21 @@
       ctx.fillText(t.txt.includes('PURPLE') ? 'Save it to unlock an extra active skill slot!' : 'Save it to unlock an extra passive skill slot!', 0, 34);
       ctx.restore(); ctx.globalAlpha = 1;
     }
-    // HP bar under player
-    const bx = W / 2 - 18, by = H / 2 + 22;
-    ctx.fillStyle = '#400'; ctx.fillRect(bx, by, 36, 5);
-    ctx.fillStyle = '#e33'; ctx.fillRect(bx, by, 36 * Math.max(0, p.hp / p.maxHp), 5);
+    // Red screen edges: pulse when health is low (stronger below 20%), and flash briefly on each hit
+    const frac = Math.max(0, p.hp / p.maxHp);
+    let edge = frac < 0.35 ? (frac < 0.2 ? 0.45 : 0.25) * (0.6 + 0.4 * Math.sin(S.t * (frac < 0.2 ? 9 : 5))) : 0;
+    if (p.hitFlash > 0) edge = Math.max(edge, p.hitFlash / 0.3 * 0.5);
+    if (edge > 0) {
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.hypot(W, H) / 2);
+      g.addColorStop(0, 'rgba(255, 0, 0, 0)'); g.addColorStop(1, `rgba(220, 0, 0, ${edge})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    // HP bar under player; the white part is damage just taken, draining away
+    const bw = 48, bx = W / 2 - bw / 2, by = H / 2 + 22;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(bx - 1, by - 1, bw + 2, 8);
+    ctx.fillStyle = '#400'; ctx.fillRect(bx, by, bw, 6);
+    if (p.hpGhost > p.hp) { ctx.fillStyle = '#fff'; ctx.fillRect(bx, by, bw * Math.min(1, p.hpGhost / p.maxHp), 6); }
+    ctx.fillStyle = frac < 0.35 ? '#ff3b3b' : '#e33'; ctx.fillRect(bx, by, bw * frac, 6);
     let hy = 52;
     if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, hy); hy += 18; }
     ctx.textAlign = 'left'; ctx.fillStyle = '#c9a8ff'; ctx.font = '12px system-ui';
