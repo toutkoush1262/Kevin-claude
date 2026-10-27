@@ -834,9 +834,9 @@
   }
   const CLONE_BLAST = 480; // blast radius: covers a whole phone screen
   function cloneExplode(x, y, mult) {
-    const p = S.player, rad = CLONE_BLAST * (aug('clone', 'kin') ? Math.sqrt(1.5) : 1) * (hasMod(p, 'clone', 'walkaway') ? 1.75 : 1); // Kinship: +50% area; Walkaway: ~3x area
+    const p = S.player, rad = CLONE_BLAST * (hasMod(p, 'clone', 'walkaway') ? 1.75 : 1); // Walkaway: ~3x area
     // Grows with Propagate's level and Might, plus half your max HP (a bonus for tanky builds)
-    const dmg = ((85 + 35 * p.w.clone.level) * p.might + p.maxHp * 0.5) * (hasMod(p, 'clone', 'walkaway') ? 2 : 1) * mult * (aug('clone', 'strongspawn') ? 1.4 : 1);
+    const dmg = ((85 + 35 * p.w.clone.level) * p.might + p.maxHp * 0.5) * (hasMod(p, 'clone', 'walkaway') ? 2 : 1) * mult;
     const hunter = hasMod(p, 'clone', 'abandon'); // Abandonment Issues: double damage to elites and the boss
     for (const e of S.enemies) if (dist2(e, { x, y }) < (rad + e.r) ** 2) damageEnemy(e, dmg * (hunter && (e.elite || e.boss) ? 2 : 1), (e.x - x) * 2, (e.y - y) * 2);
     S.shockwaves.push({ x, y, r: 0, max: rad, life: 0.6, color: '#ff8a5c' }, { x, y, r: -30, max: rad, life: 0.7, color: '#ffd84a' });
@@ -844,8 +844,8 @@
     for (let i = 0; i < 40; i++) { const a = Math.random() * 6.28, sp = rand(200, 700); S.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.7), color: i % 2 ? '#ff8a5c' : '#f3e6c8' }); }
   }
   // Transplant Trauma timings (seconds): fuse before exploding and wait before respawning
-  const cloneFuse = p => (hasMod(p, 'clone', 'extratrauma') ? 2 : 5) * (aug('clone', 'haste') ? 0.75 : 1);
-  const cloneRespawn = p => (hasMod(p, 'clone', 'extratrauma') ? 3 : 5) * (aug('clone', 'haste') ? 0.75 : 1);
+  const cloneFuse = p => hasMod(p, 'clone', 'extratrauma') ? 2 : 5;
+  const cloneRespawn = p => hasMod(p, 'clone', 'extratrauma') ? 3 : 5;
   // The i-th strongest enemy, so Runaway's extra clones each chase a different one
   const strongest = i => S.enemies.slice().sort((a, b) => b.hp - a.hp)[Math.min(i, S.enemies.length - 1)] || null;
   const aliveClones = () => S.clones.filter(c => !c.dead).length;
@@ -854,7 +854,7 @@
     const p = S.player, lvl = p.w.clone.level;
     if (lvl <= 0) { S.clones = []; return; }
     const bomber = hasMod(p, 'clone', 'trauma');
-    const want = bomber ? 1 + (hasMod(p, 'clone', 'runaway') ? 2 : 0) : 1 + (hasMod(p, 'clone', 'extraclone') ? 1 : 0) + (hasMod(p, 'clone', 'nation') ? 1 : 0) + (aug('clone', 'kin') ? 1 : 0);
+    const want = bomber ? 1 + (hasMod(p, 'clone', 'runaway') ? 2 : 0) : 1 + (hasMod(p, 'clone', 'extraclone') ? 1 : 0) + (hasMod(p, 'clone', 'nation') ? 1 : 0);
     while (S.clones.length < want) { const c = newClone(S.clones.length); S.clones.push(c); spawnClone(c); }
     S.clones.length = want;
     const fun = hasMod(p, 'clone', 'funguys');
@@ -892,8 +892,8 @@
         if (c.funSig !== sig) { c.funSig = sig; c.funMods = randomMods(p); }
         c.mods = c.funMods;
       } else c.mods = p.mods;
-      c.might = p.might * (hasMod(p, 'clone', 'colony') ? 1 : cloneEff(lvl)) * (aug('clone', 'strongspawn') ? 1.25 : 1);
-      updateWeapons(c, (fun ? dt * 2 : dt) * (aug('clone', 'haste') ? 1.25 : 1));
+      c.might = p.might * (hasMod(p, 'clone', 'colony') ? 1 : cloneEff(lvl));
+      updateWeapons(c, fun ? dt * 2 : dt);
     }
   }
 
@@ -1414,9 +1414,6 @@
     boomer: [{ id: 'hardcap', name: 'Hard Cap', desc: '+40% Shroomerang damage.' },
       { id: 'twinthrow', name: 'Twin Throw', desc: '+1 Shroomerang per throw.' },
       { id: 'farflight', name: 'Far Flight', desc: 'Shroomerangs fly 30% farther and faster.' }],
-    clone: [{ id: 'strongspawn', name: 'Strong Spawn', desc: 'Clones are 25% stronger, and clone explosions deal 40% more.' },
-      { id: 'kin', name: 'Kinship', desc: '+1 attacking clone. With Transplant Trauma, explosions cover 50% more area instead.' },
-      { id: 'haste', name: 'Hasty Spores', desc: 'Clones act 25% faster; exploding clones go off and regrow 25% sooner.' }],
     hp: [{ id: 'heartwood', name: 'Heartwood', desc: '+60 max HP.', apply: p => { p.maxHp += 60; p.hp += 60; } },
       { id: 'bark', name: 'Bark Skin', desc: 'Take 10% less damage from everything.' },
       { id: 'sap', name: 'Sap Flow', desc: 'Regenerate 1 HP per second.', apply: p => { p.regen += 1; } }],
@@ -1442,7 +1439,7 @@
   // Augments always come from the player, so clones use them too
   const aug = (k, id) => (S.player.aug[k] || []).includes(id);
   const maxedSkills = () => UPGRADES.filter(u => (S.player.upgrades[u.id] || 0) >= u.max && AUGMENTS[u.id]);
-  const auntieUnlocked = () => UPGRADES.some(u => (S.player.upgrades[u.id] || 0) >= 15);
+  const auntieUnlocked = () => UPGRADES.some(u => !u.auto && (S.player.upgrades[u.id] || 0) >= 15); // Propagate doesn't count
 
   function placeAuntie() {
     if (!S.merchant || !auntieUnlocked()) return;
