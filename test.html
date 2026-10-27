@@ -442,6 +442,7 @@
   const forageStacks = (t, id) => (S.forage[t] && S.forage[t].picks[id]) || 0; // the Mushroom Shield has no Forage track
   // Mushroom Shield: a rare mushroom (1/5 as common as the others). Eating it grows a shield tree where you stand that
   // fires rings of mushrooms, and wraps you in a shield that blocks all damage for 10 seconds.
+  const rainbow = (off = 0) => `hsl(${(S.t * 120 + off) % 360}, 95%, 65%)`; // cycles through the rainbow over 3 s
   const SHIELD_SHROOM = { color: '#7fe8ff', interval: [180, 270], shield: 10, treeLife: 10, grow: 0.6, novaEvery: 1.2, novaCount: 16, dmg: 20 };
   const forageFreq = t => (1 + 0.35 * forageStacks(t, 'bountiful')) / (1 + S.t / 300); // ~5x rarer by 20 minutes
 
@@ -463,7 +464,7 @@
       const full = SHIELD_SHROOM.novaCount, n = budgetCount(full), dmg = SHIELD_SHROOM.dmg * hpScale(S.t) * (full / n), off = Math.random();
       for (let i = 0; i < n; i++) {
         const a = ((i + off) / n) * Math.PI * 2;
-        S.bullets.push({ x: tr.x, y: tr.y - 30, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, r: 6, dmg, life: 1.6, pierce: 3, kind: 'shieldcap', hit: new Set() });
+        S.bullets.push({ x: tr.x, y: tr.y - 30, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, r: 6, dmg, life: 1.6, pierce: 3, kind: 'shieldcap', hue: (i / n) * 360, hit: new Set() });
       }
     }
     S.trees = S.trees.filter(tr => tr.life > 0);
@@ -2050,7 +2051,7 @@
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 4, 26, 7, 0, 0, 7); ctx.fill();
     ctx.fillStyle = '#8a6a4a'; ctx.beginPath(); ctx.moveTo(-7, 4); ctx.lineTo(-4 + sway, -36); ctx.lineTo(4 + sway, -36); ctx.lineTo(7, 4); ctx.fill(); // trunk
     ctx.strokeStyle = '#8a6a4a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(sway, -20); ctx.lineTo(-18 + sway, -34); ctx.moveTo(sway, -24); ctx.lineTo(18 + sway, -38); ctx.stroke();
-    drawMushroom(-18 + sway, -28, 22, SHIELD_SHROOM.color); drawMushroom(18 + sway, -32, 22, SHIELD_SHROOM.color); drawMushroom(sway, -38, 34, '#4fc9e8');
+    drawMushroom(-18 + sway, -28, 22, rainbow(120)); drawMushroom(18 + sway, -32, 22, rainbow(240)); drawMushroom(sway, -38, 34, rainbow());
     ctx.restore();
   }
 
@@ -2117,10 +2118,9 @@
     // Magic mushrooms
     for (const m of S.shrooms) {
       if (m.life < 5 && Math.floor(m.life * 6) % 2) continue;
-      const col = { red: '#ff4b4b', blue: '#4bb8ff', gold: '#ffd84a', shield: SHIELD_SHROOM.color }[m.kind];
+      const col = m.kind === 'shield' ? rainbow() : { red: '#ff4b4b', blue: '#4bb8ff', gold: '#ffd84a' }[m.kind];
       if (m.kind === 'shield') { // rare: a slow spinning ring of sparkles
-        ctx.fillStyle = SHIELD_SHROOM.color;
-        for (let i = 0; i < 6; i++) { const a = S.t * 1.5 + i * 1.047; ctx.fillRect(m.x + Math.cos(a) * 22 - 1.5, m.y + Math.sin(a) * 12 - 1.5, 3, 3); }
+        for (let i = 0; i < 6; i++) { const a = S.t * 1.5 + i * 1.047; ctx.fillStyle = rainbow(i * 60); ctx.fillRect(m.x + Math.cos(a) * 22 - 1.5, m.y + Math.sin(a) * 12 - 1.5, 3, 3); }
       }
       ctx.shadowColor = col; ctx.shadowBlur = 18;
       drawMushroom(m.x, m.y + 8 + Math.sin(S.t * 3) * 2, 22, col);
@@ -2220,7 +2220,7 @@
     for (const tr of S.trees) drawShieldTree(tr);
     drawPlayer(p);
     if (p.shield > 0 && !(p.shield < 2 && Math.floor(p.shield * 8) % 2)) { // shield bubble, flickers in its last 2 seconds
-      ctx.fillStyle = 'rgba(127, 232, 255, 0.16)'; ctx.strokeStyle = 'rgba(127, 232, 255, 0.85)'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; ctx.strokeStyle = rainbow(); ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.arc(p.x, p.y - 4, 30 + Math.sin(S.t * 6) * 1.5, 0, 7); ctx.fill(); ctx.stroke();
     }
 
@@ -2244,7 +2244,7 @@
     // Bullets
     for (const b of S.bullets) {
       if (!inView(b.x, b.y)) continue;
-      if (b.kind === 'shieldcap') { drawMushroom(b.x, b.y + 4, 13, SHIELD_SHROOM.color); continue; }
+      if (b.kind === 'shieldcap') { drawMushroom(b.x, b.y + 4, 13, rainbow(b.hue)); continue; }
       if (b.kind === 'bolt') {
         ctx.fillStyle = 'rgba(176, 102, 255, 0.35)'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, 7); ctx.fill(); // cheap glow
         ctx.fillStyle = '#d9a6ff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
@@ -2454,7 +2454,7 @@
     ctx.fillStyle = frac < 0.35 ? '#ff3b3b' : '#e33'; ctx.fillRect(bx, by, bw * frac, 6);
     let hy = 52;
     if (p.speedBoost > 0) { ctx.textAlign = 'left'; ctx.fillStyle = '#6bc7ff'; ctx.fillText(`Speed ${Math.ceil(p.speedBoost)}s`, 12, hy); hy += 18; }
-    if (p.shield > 0) { ctx.textAlign = 'left'; ctx.fillStyle = SHIELD_SHROOM.color; ctx.fillText(`Shield ${Math.ceil(p.shield)}s`, 12, hy); hy += 18; }
+    if (p.shield > 0) { ctx.textAlign = 'left'; ctx.fillStyle = rainbow(); ctx.fillText(`Shield ${Math.ceil(p.shield)}s`, 12, hy); hy += 18; }
     ctx.textAlign = 'left'; ctx.fillStyle = '#c9a8ff'; ctx.font = '12px system-ui';
     for (const k in p.mods) p.mods[k].forEach(c => { ctx.fillText('✦ ' + MOD_TREES[k][c].name, 12, hy); hy += 16; });
     if (S.paused && !menuOpen()) {
