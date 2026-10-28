@@ -89,7 +89,7 @@
     <span style="color:#ff6b6b">Red</span> heals · <span style="color:#6bc7ff">Blue</span> speed ·
     <span style="color:#ffd84a">Gold</span> pulls in all spores</p>
   <button id="startBtn">Start</button>
-  <p class="version">TEST REALM · v0.0.4-test · Auntie Amanita, augments &amp; Shroomerang</p>
+  <p class="version">TEST REALM · v0.0.6-test · charms, 5 active slots, augment cards</p>
 </div>
 
 <div id="levelup" class="overlay hidden">
@@ -947,7 +947,7 @@
   // Each run is saved to this page's storage (collection "runs") so Claude can read how real runs go: level and kills
   // each minute, every pick, crystals, shop visits, elites, the boss, damage taken by source and what ended the run.
   // Saved once a minute, when the tab is hidden, and at the end. Does nothing when the page has no storage (e.g. a local file).
-  const GAME_VERSION = 'v0.0.4-test';
+  const GAME_VERSION = 'v0.0.6-test';
   const RUNLOG = { db: null, saving: false, again: false };
   (async () => { try { RUNLOG.db = (await window.claude?.use?.('db')) || null; } catch { RUNLOG.db = null; } })();
 
