@@ -53,6 +53,7 @@
   .cbtn:hover { background: var(--c); filter: brightness(1.15); }
   .cbtn:disabled { opacity: 0.25; cursor: default; filter: none; }
   .shop.aug { border-color: #8a4fd1; }
+  .ctier { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-left: 4px; }
   .augcount { color: #8fb39a; font-weight: 400; font-size: 12px; }
   .augowned { color: #7be36b; font-size: 13px; font-weight: 700; }
   #augClose { display: block; margin: 14px auto 0; }
@@ -373,7 +374,7 @@
     S = {
       t: 0, kills: 0, running: true, paused: false, spawnAcc: 0,
       player: {
-        x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0, xpMult: 1, crystalLuck: 1, slots: { ...SLOT_START }, aug: {},
+        x: 0, y: 0, r: 14, hp: 100, maxHp: 100, speed: 170, might: 1, magnet: 70, regen: 0, xpMult: 1, crystalLuck: 1, slots: { ...SLOT_START }, aug: {}, charms: [], dmgTaken: 1,
         level: 1, xp: 0, xpNext: 5, hurt: 0, cloneSkills: [], face: 1, speedBoost: 0, upgrades: {}, mods: {}, crystals: { blue: 0, green: 0, red: 0, purple: 0 },
         w: {
           bolt: { level: 1, cd: 0 },
@@ -388,7 +389,7 @@
       enemies: [], bullets: [], rangs: [], tendrils: [], delayed: [], clones: [], hazards: [], auntie: null, boss: null, bossDefeated: false, eliteAt: ELITE_FROM + rand(0, 15), snailAt: 0, crystals: [], merchant: null, shopCycle: 0, cycleDrops: 0, banner: null, shockwaves: [], flash: null, bigText: null, slowmo: 0, gems: [], shrooms: [], particles: [], texts: [],
       shroomTimers: { red: rand(8, 14), blue: rand(16, 24), gold: rand(26, 36) },
       forage: { red: { count: 0, level: 0, picks: {} }, blue: { count: 0, level: 0, picks: {} }, gold: { count: 0, level: 0, picks: {} } },
-      pendingForage: [], trees: [], shieldTimer: rand(90, 200),
+      pendingForage: [], trees: [], charmStock: [], shieldTimer: rand(90, 200),
     };
   }
 
@@ -1000,7 +1001,7 @@
       S.shockwaves.push({ x: p.x, y: p.y, r: 0, max: 40, life: 0.3, color: '#f3c1e8' });
       return 'blocked';
     }
-    const taken = dmg * (p.thickSkin > 0 ? 1 - 0.2 * forageStacks('red', 'thickskin') : 1) * (aug('hp', 'bark') ? 0.9 : 1);
+    const taken = dmg * (p.thickSkin > 0 ? 1 - 0.2 * forageStacks('red', 'thickskin') : 1) * (aug('hp', 'bark') ? 0.9 : 1) * p.dmgTaken;
     if (!(p.ghostDelay > 0)) p.hpGhost = p.hp; // the bar shows the chunk you just lost fading out
     p.ghostDelay = 0.5;
     p.hp -= taken;
@@ -1353,10 +1354,10 @@
 
   // ---------- Crystals & merchant ----------
   const CRYSTALS = {
-    blue:   { color: '#4da6ff', use: 'level up an active skill (costs the new level number in crystals)' },
-    green:  { color: '#5ee07a', use: 'level up a passive skill (costs the new level number in crystals)' },
-    red:    { color: '#ff4d5e', use: 'rare. Unlocks extra passive skill slots' },
-    purple: { color: '#b36bff', use: 'rare. Unlocks extra active skill slots' },
+    blue:   { color: '#4da6ff', use: 'common charms, and Auntie\'s augments for active skills' },
+    green:  { color: '#5ee07a', use: 'common charms, and Auntie\'s augments for passive skills' },
+    red:    { color: '#ff4d5e', use: 'rare. Extra passive skill slots and corrupted charms' },
+    purple: { color: '#b36bff', use: 'rare. Extra active skill slots and rare charms' },
   };
   const MERCHANT = 'Old Toadley';
 
@@ -1396,6 +1397,7 @@
     if (S.merchant) { S.banner = { txt: `🐸 ${MERCHANT} is still waiting for you. Follow the arrow!`, life: 4 }; if (!S.auntie) placeAuntie(); return; }
     const p = S.player, a = Math.random() * Math.PI * 2;
     S.merchant = { x: p.x + Math.cos(a) * 280, y: p.y + Math.sin(a) * 280 };
+    rollCharmStock();
     logEvent('merchant-arrives', { level: p.level });
     S.banner = { txt: `🐸 ${MERCHANT} the crystal merchant has arrived! Follow the arrow. He'll wait for you.`, life: 5 };
     placeAuntie();
@@ -1413,17 +1415,35 @@
     resumeGame();
   }
 
-  // Shop tooltips: what a skill does, what its next level gives, its modifiers so far and when the next one unlocks.
-  // Tap or click a skill name to pin it open (works on phones); with a mouse, hovering shows it too.
-  const shopTips = new Set();
-  function skillTip(u) {
-    const p = S.player, lvl = p.upgrades[u.id] || 0, lines = [u.desc];
-    if (!canLearn(u)) lines.push(`<b>Needs a free ${u.type} skill slot.</b>`);
-    if (lvl < u.max && u.info) lines.push(`<b>Next level:</b> ${u.info(p)}`);
-    const picked = (p.mods[u.id] || []).map(c => MOD_TREES[u.id][c].name);
-    if (picked.length) lines.push(`<b>Modifiers:</b> ${picked.join(', ')}`);
-    if (MOD_TREES[u.id] && lvl < u.max) lines.push(`<b>Next modifier choice:</b> level ${Math.floor(lvl / 5) * 5 + 5}`);
-    return lines.join('<br>');
+  // ---------- Charms ----------
+  // Unique items sold by Old Toadley, each bought once. Common ones cost blue or green, rare ones purple, and corrupted
+  // ones (strong, with a downside) red. Placeholder list until the real charms are designed.
+  const CHARM_TIERS = {
+    common: { label: 'Common', color: '#cfd8cf' },
+    rare: { label: 'Rare', color: '#b36bff' },
+    corrupted: { label: 'Corrupted', color: '#ff4d5e' },
+  };
+  const CHARMS = [
+    { id: 'sharpspores', tier: 'common', cost: ['blue', 8], name: 'Sharp Spores', desc: '+10% damage.', apply: p => { p.might *= 1.1; } },
+    { id: 'sporelens', tier: 'common', cost: ['blue', 8], name: 'Spore Lens', desc: '+25% spore pickup range.', apply: p => { p.magnet *= 1.25; } },
+    { id: 'luckypebble', tier: 'common', cost: ['blue', 8], name: 'Lucky Pebble', desc: '+10% XP.', apply: p => { p.xpMult += 0.1; } },
+    { id: 'heartymoss', tier: 'common', cost: ['green', 8], name: 'Hearty Moss', desc: '+30 max HP.', apply: p => { p.maxHp += 30; p.hp += 30; } },
+    { id: 'springystem', tier: 'common', cost: ['green', 8], name: 'Springy Stem', desc: '+8% movement speed.', apply: p => { p.speed *= 1.08; } },
+    { id: 'dewdrop', tier: 'common', cost: ['green', 8], name: 'Dewdrop', desc: 'Regenerate 0.5 HP per second.', apply: p => { p.regen += 0.5; } },
+    { id: 'eldercap', tier: 'rare', cost: ['purple', 2], name: 'Elder Cap', desc: '+25% damage.', apply: p => { p.might *= 1.25; } },
+    { id: 'heartwoodcore', tier: 'rare', cost: ['purple', 2], name: 'Heartwood Core', desc: '+80 max HP.', apply: p => { p.maxHp += 80; p.hp += 80; } },
+    { id: 'goldengills', tier: 'rare', cost: ['purple', 2], name: 'Golden Gills', desc: '+25% XP.', apply: p => { p.xpMult += 0.25; } },
+    { id: 'ironbark', tier: 'rare', cost: ['purple', 2], name: 'Iron Bark', desc: 'Take 15% less damage.', apply: p => { p.dmgTaken *= 0.85; } },
+    { id: 'glasscap', tier: 'corrupted', cost: ['red', 2], name: 'Glass Cap', desc: '+40% damage, but −30% max HP.', apply: p => { p.might *= 1.4; p.maxHp *= 0.7; p.hp = Math.min(p.hp, p.maxHp); } },
+    { id: 'gluttony', tier: 'corrupted', cost: ['red', 2], name: 'Gluttony', desc: '+35% XP, but take 20% more damage.', apply: p => { p.xpMult += 0.35; p.dmgTaken *= 1.2; } },
+    { id: 'heavycrown', tier: 'corrupted', cost: ['red', 2], name: 'Heavy Crown', desc: '+30% damage, but −15% movement speed.', apply: p => { p.might *= 1.3; p.speed *= 0.85; } },
+    { id: 'rottencore', tier: 'corrupted', cost: ['red', 2], name: 'Rotten Core', desc: '+60 max HP, but no health regeneration.', apply: p => { p.maxHp += 60; p.hp += 60; p.noRegen = true; } },
+  ];
+  // Each visit Old Toadley stocks 2 common charms (one blue, one green), 1 rare and 1 corrupted you don't own yet
+  function rollCharmStock() {
+    const owned = S.player.charms, pick = f => { const o = CHARMS.filter(c => f(c) && !owned.includes(c.id)); return o.length ? o[Math.floor(Math.random() * o.length)].id : null; };
+    S.charmStock = [pick(c => c.tier === 'common' && c.cost[0] === 'blue'), pick(c => c.tier === 'common' && c.cost[0] === 'green'),
+      pick(c => c.tier === 'rare'), pick(c => c.tier === 'corrupted')].filter(Boolean);
   }
 
   function renderShop(msg) {
@@ -1437,21 +1457,21 @@
         ${price ? btn(kind, 'slot', type, c[kind] < price, `Unlock #${have + 1} · ${price}◆`, `Spend ${price} ${kind} crystals: +1 ${type} skill slot`) : ''}
       </div></div></div>`;
     };
-    const row = u => {
-      const lvl = p.upgrades[u.id] || 0, maxed = lvl >= u.max, lk = u.type === 'active' ? 'blue' : 'green', noSlot = !canLearn(u);
-      return `<div class="sitem${shopTips.has(u.id) ? ' open' : ''}"><div class="srow"><button type="button" class="sname" data-tip="${u.id}" aria-expanded="${shopTips.has(u.id)}">${u.name} <span class="ihint" aria-hidden="true">ⓘ</span><small>${lvl === 0 ? 'Not learned' : `Lv ${lvl} / ${u.max}`}${maxed ? ' · MAX' : ''}</small></button><div class="sbtns">
-        ${noSlot ? btn(lk, 'up', u.id, true, 'No slot', `All your ${u.type} skill slots are full. Unlock another slot above.`)
-          : btn(lk, 'up', u.id, maxed || c[lk] < lvl + 1, maxed ? '+1' : `+1 · ${lvl + 1}◆`, `Spend ${lvl + 1} ${lk} crystals: +1 level`)}
-      </div></div><div class="stip">${skillTip(u)}</div></div>`;
+    const charmRow = id => {
+      const ch = CHARMS.find(x => x.id === id), [kind, price] = ch.cost, tier = CHARM_TIERS[ch.tier];
+      return `<div class="sitem"><div class="srow"><div class="sname static">${ch.name} <span class="ctier" style="color:${tier.color}">${tier.label}</span><small>${ch.desc}</small></div><div class="sbtns">
+        ${btn(kind, 'charm', id, c[kind] < price, `${price}◆`, `Spend ${price} ${kind} crystals: ${ch.name}`)}
+      </div></div></div>`;
     };
+    const mine = p.charms.map(id => CHARMS.find(x => x.id === id).name);
     document.getElementById('shopBody').innerHTML = `
       <div class="wallet">${Object.keys(CRYSTALS).map(k => `<span>${gem(k)} ${c[k]}</span>`).join('')}</div>
       <div class="legend">${Object.keys(CRYSTALS).map(k => `${gem(k)} ${k[0].toUpperCase() + k.slice(1)}: ${CRYSTALS[k].use}`).join('<br>')}</div>
       <div class="shopmsg">${msg}</div>
       <div class="ssec">Skill slots</div>${['active', 'passive'].map(slotRow).join('')}
 
-      <div class="ssec">Active skills</div>${UPGRADES.filter(u => u.type === 'active' && !u.auto).map(row).join('')}
-      <div class="ssec">Passive skills</div>${UPGRADES.filter(u => u.type === 'passive').map(row).join('')}`;
+      <div class="ssec">Charms</div>${S.charmStock.length ? S.charmStock.map(charmRow).join('') : '<div class="legend">Sold out! More next time.</div>'}
+      ${mine.length ? `<div class="legend">Your charms: ${mine.join(', ')}</div>` : ''}`;
   }
 
   function shopAction(act, id, kind) {
@@ -1461,29 +1481,16 @@
       p.crystals[kind] -= nextSlotPrice(id); p.slots[id]++;
       return renderShop(`Unlocked ${id} skill slot #${p.slots[id]}!`);
     }
-    const u = UPGRADES.find(x => x.id === id), targets = [u];
-    // Blue (active) and green (passive) crystals cost the level being bought: 5 -> 6 costs 6
-    logEvent('shop-buy', { skill: id, toLevel: (p.upgrades[id] || 0) + 1, cost: (p.upgrades[id] || 0) + 1, crystal: kind });
-    p.crystals[kind] -= (p.upgrades[id] || 0) + 1;
-    const msg = targets.map(t => `${t.name} → level ${(p.upgrades[t.id] || 0) + 1}`).join(' & ') + '!';
-    // Apply each level; any that reaches 5/10/15 opens its modifier choice before returning to the shop
-    const pending = targets.map(u => [u.id, gainLevel(u)]).filter(([, t]) => t >= 0);
-    const next = () => {
-      if (!pending.length) return openShop(msg);
-      const [k, t] = pending.shift();
-      document.getElementById('shop').classList.add('hidden');
-      showModifierChoice(k, t, next);
-    };
-    next();
+    if (act === 'charm') {
+      const ch = CHARMS.find(x => x.id === id), [k, price] = ch.cost;
+      if (p.crystals[k] < price || p.charms.includes(id)) return;
+      p.crystals[k] -= price; p.charms.push(id); ch.apply(p);
+      S.charmStock = S.charmStock.filter(x => x !== id);
+      logEvent('charm', { charm: ch.name, tier: ch.tier, cost: price, crystal: k });
+      return renderShop(`${ch.name} is yours!`);
+    }
   }
   document.getElementById('shopBody').addEventListener('click', e => {
-    const tip = e.target.closest('[data-tip]');
-    if (tip) {
-      const id = tip.dataset.tip, item = tip.closest('.sitem');
-      shopTips.has(id) ? shopTips.delete(id) : shopTips.add(id);
-      item.classList.toggle('open', shopTips.has(id)); tip.setAttribute('aria-expanded', shopTips.has(id));
-      return;
-    }
     const b = e.target.closest('button[data-act]');
     if (b && !b.disabled) shopAction(b.dataset.act, b.dataset.id, b.dataset.kind);
   });
@@ -1641,7 +1648,7 @@
     p.hurt = Math.max(0, p.hurt - dt);
     if (p.hitFlash > 0) p.hitFlash -= dt;
     if (p.ghostDelay > 0) p.ghostDelay -= dt; else if (p.hpGhost > p.hp) p.hpGhost = Math.max(p.hp, p.hpGhost - p.maxHp * 0.8 * dt);
-    p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
+    if (!p.noRegen) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt); // Rotten Core stops regeneration
 
     // Spawning: rate ramps up over time
     if (S.log && S.t >= S.logNextMinute) { S.log.perMinute.push(logSnapshot()); S.logNextMinute += 60; saveRunLog(); }
