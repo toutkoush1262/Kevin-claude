@@ -66,6 +66,7 @@
   #testClose { display: block; margin: 14px auto 0; }
   #shopClose { display: block; margin: 14px auto 0; }
   .slotinfo { margin: -8px 0 12px; font-size: 13px; color: #8fb39a; min-height: 1.2em; }
+  .savenote { font-size: 13px; color: #8fb39a; min-height: 1.3em; margin: -6px 0 10px; }
   .version { margin-top: 18px; font-size: 13px; color: #6f8a77; }
   .card.forage { border-color: var(--fc); }
   .card.forage b { color: var(--fc); }
@@ -139,6 +140,7 @@
 <div id="gameover" class="overlay hidden">
   <h1 id="endTitle">You got eaten! 🍽️</h1>
   <p id="finalStats"></p>
+  <p id="saveNote" class="savenote"></p>
   <button id="restartBtn">Play again</button>
 </div>
 
@@ -948,7 +950,7 @@
   // each minute, every pick, crystals, shop visits, elites, the boss, damage taken by source and what ended the run.
   // Saved once a minute, when the tab is hidden, and at the end. Does nothing when the page has no storage (e.g. a local file).
   const GAME_VERSION = 'v0.0.6-test';
-  const RUNLOG = { db: null, saving: false, again: false };
+  const RUNLOG = { db: null, queued: new Map(), loop: null, failed: new Set() };
   (async () => { try { RUNLOG.db = (await window.claude?.use?.('db')) || null; } catch { RUNLOG.db = null; } })();
 
   function startRunLog() {
@@ -968,20 +970,40 @@
     return { min: Math.round(S.t / 60), level: p.level, kills: S.kills, hp: Math.round(p.hp), maxHp: Math.round(p.maxHp), enemies: S.enemies.length,
       crystals: { ...p.crystals }, skills: Object.fromEntries(UPGRADES.filter(u => p.upgrades[u.id]).map(u => [u.id, p.upgrades[u.id]])) };
   }
-  async function saveRunLog() {
-    if (!RUNLOG.db || !S.log) return;
-    if (RUNLOG.saving) { RUNLOG.again = true; return; } // one write at a time; save again right after if more happened
-    RUNLOG.saving = true;
+  // Snapshots the current run now and queues it (newest copy per run wins); writes go out one at a time.
+  // Snapshotting up front means a save still waiting when you hit Play again can't pick up the next run's log.
+  // Returns a promise that settles once everything queued has been written.
+  function saveRunLog() {
+    if (!RUNLOG.db || !S.log) return Promise.resolve();
+    RUNLOG.queued.set(S.log.id, runDoc());
+    RUNLOG.loop ||= (async () => {
+      while (RUNLOG.queued.size) {
+        const [id, doc] = RUNLOG.queued.entries().next().value;
+        RUNLOG.queued.delete(id);
+        try { await RUNLOG.db.doc('runs/' + id).set(doc); RUNLOG.failed.delete(id); } catch { RUNLOG.failed.add(id); } // storage unavailable or full
+      }
+      RUNLOG.loop = null;
+    })();
+    return RUNLOG.loop;
+  }
+  function runDoc() {
     const p = S.player;
     const doc = { ...S.log, updatedAt: new Date().toISOString(), timeSec: Math.round(S.t), final: logSnapshot(),
       mods: Object.fromEntries(Object.entries(p.mods).map(([k, codes]) => [k, codes.map(c => MOD_TREES[k][c].name)])),
       forage: Object.fromEntries(Object.entries(S.forage).map(([t, f]) => [t, { collected: f.count, level: f.level, picks: f.picks }])),
       slots: { ...p.slots }, augments: { ...p.aug }, bossDefeated: S.bossDefeated };
-    try { await RUNLOG.db.doc('runs/' + S.log.id).set(doc); } catch { /* storage unavailable or full: skip quietly */ }
-    RUNLOG.saving = false;
-    if (RUNLOG.again) { RUNLOG.again = false; saveRunLog(); }
+    return JSON.parse(JSON.stringify(doc));
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden && S && S.running) saveRunLog(); });
+  window.addEventListener('pagehide', () => { if (S && S.running) saveRunLog(); });
+  // End screen: tell the player when the run has been saved, so they know it's safe to close
+  function saveAndReport() {
+    const note = document.getElementById('saveNote');
+    if (!RUNLOG.db || !S.log) { note.textContent = ''; return; }
+    const id = S.log.id;
+    note.textContent = 'Saving your run…';
+    saveRunLog().then(() => { if (S.log && S.log.id === id) note.textContent = RUNLOG.failed.has(id) ? "Couldn't save this run's log." : 'Run saved ✓'; });
+  }
 
   // ---------- Player damage ----------
   // Every hit on the player goes through here so blocking, Thick Skin and Sacrificial Shrooms apply to bites and boss
@@ -1176,8 +1198,8 @@
   }
 
   function bossDefeated(b) {
-    logEvent('boss-defeated', { fightSec: Math.round(S.t - BOSS_AT), level: S.player.level }); saveRunLog();
     S.boss = null; S.bossDefeated = true;
+    logEvent('boss-defeated', { fightSec: Math.round(S.t - BOSS_AT), level: S.player.level }); saveRunLog();
     S.banner = { txt: '☮ You out-foraged the Giant Hippie! Peace restored. ☮', life: 6, color: '#ffd84a' };
     S.bigText = { txt: 'BOSS DEFEATED!', life: 2.5, color: '#ffd84a' };
     S.flash = { color: '#ffd84a', life: 0.7 }; S.slowmo = 1.2;
@@ -1821,7 +1843,8 @@
 
   function gameOver() {
     S.running = false;
-    if (S.log) { S.log.status = 'died'; S.log.killedBy = S.lastHitBy || 'unknown'; S.log.perMinute.push(logSnapshot()); saveRunLog(); }
+    if (S.log) { S.log.status = 'died'; S.log.killedBy = S.lastHitBy || 'unknown'; S.log.perMinute.push(logSnapshot()); }
+    saveAndReport();
     const m = Math.floor(S.t / 60), s = Math.floor(S.t % 60).toString().padStart(2, '0');
     document.getElementById('endTitle').textContent = 'You got eaten! 🍽️'; document.getElementById('endTitle').style.color = '';
     document.getElementById('finalStats').innerHTML = `Survived <b>${m}:${s}</b> · Level <b>${S.player.level}</b> · Defeated <b>${S.kills}</b> creatures`;
@@ -1831,7 +1854,8 @@
   // Beating the Giant Hippie ends the run (for now)
   function winGame() {
     S.running = false;
-    if (S.log) { S.log.status = 'won'; S.log.perMinute.push(logSnapshot()); saveRunLog(); }
+    if (S.log) { S.log.status = 'won'; S.log.perMinute.push(logSnapshot()); }
+    saveAndReport();
     const m = Math.floor(S.t / 60), s = Math.floor(S.t % 60).toString().padStart(2, '0');
     document.getElementById('endTitle').textContent = 'You beat the Giant Hippie! 🍄🏆'; document.getElementById('endTitle').style.color = '#ffd84a';
     document.getElementById('finalStats').innerHTML = `Won at <b>${m}:${s}</b> · Level <b>${S.player.level}</b> · Defeated <b>${S.kills}</b> creatures`;
