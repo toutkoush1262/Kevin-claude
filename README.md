@@ -31,4 +31,7 @@ Each version is a git tag (`v0.0.1` to `v0.0.5`); check one out to play that bui
 `test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility). Currently testing on top of v0.0.5:
 
 - **Active skill cap.** You start with 3 active skill slots and can unlock 2 more (2, then 4 purple crystals), for a maximum of 5. Propagate still doesn't use a slot. Passive slots are unchanged (4, up to 7).
+- **Augments and Growth on level-ups.** Once a skill is maxed, one of its remaining augments can show up as a free level-up choice (Auntie still sells them). When there aren't 3 skills or augments left to offer, the empty spots fill with small repeatable Growth boosts: +4% damage, +10 max HP, +3% speed, +10% pickup range, or a 30% heal.
+- **Pause button** in the bottom-right corner (P or Escape still work).
+- **Beating the Giant Hippie wins the run.** A couple of seconds after the boss falls the run ends with a victory screen, and the log records it as won.
 - **Run logs save** when the boss arrives and when you defeat it, so a boss kill is recorded even if you stop before the next minute.
