@@ -200,7 +200,7 @@
     pixie:     { hp: 14, speed: 125, dmg: 7, r: 9,  xp: 2, color: '#ff9fe8' },
     troll:     { hp: 140, speed: 38, dmg: 22, r: 28, xp: 12, color: '#7d8f6a' }, // immune to knockback
     snail:     { hp: 90, speed: 42, dmg: 16, r: 17, xp: 10, color: '#c98f5a' }, // turbo snail: late game, shell + dash
-    hippie:    { hp: 157000, speed: 70, dmg: 30, r: 58, xp: 0, color: '#ff9de2' }, // boss, spawned by spawnBoss() at 20:00
+    hippie:    { hp: 314000, speed: 70, dmg: 30, r: 58, xp: 0, color: '#ff9de2' }, // boss, spawned by spawnBoss() at 20:00
   };
 
   // Weakest enemies thin out as the run goes on: slugs fade from 3:00 and are gone by 10:00 (turbo snails take over),
@@ -1073,7 +1073,7 @@
 
   const CROWD = { ease: 150, stop: 250 };
   const TROLL_REST = 1; // seconds a troll backs off after biting (they can't be knocked back)
-  const BOSS_AT = 20 * 60, BOSS_HP = 157000; // scaled with enemy health at 20:00 (was 30,000 when enemies were 9x, now 47x)
+  const BOSS_AT = 20 * 60, BOSS_HP = 314000; // doubled from 157,000: strong builds were killing him in seconds
   const ELITE_FROM = 10 * 60, ELITE_HP = 1000; // elite HP = ELITE_HP x enemy health scale (15,000 at 10:00, about 47,000 at 20:00)
   const BOSS_WORDS = ['MUNCHIES!', 'FAR OUT!', 'GROOVY!', 'NOM, MAN!'];
   const BIG = {
@@ -1449,16 +1449,16 @@
   const CHARMS = [
     { id: 'sharpspores', tier: 'common', cost: ['blue', 8], name: 'Sharp Spores', desc: '+10% damage.', apply: p => { p.might *= 1.1; } },
     { id: 'sporelens', tier: 'common', cost: ['blue', 8], name: 'Spore Lens', desc: '+25% spore pickup range.', apply: p => { p.magnet *= 1.25; } },
-    { id: 'luckypebble', tier: 'common', cost: ['blue', 8], name: 'Lucky Pebble', desc: '+10% XP.', apply: p => { p.xpMult += 0.1; } },
+    { id: 'luckypebble', tier: 'common', cost: ['blue', 8], name: 'Lucky Pebble', desc: '+5% XP.', apply: p => { p.xpMult += 0.05; } },
     { id: 'heartymoss', tier: 'common', cost: ['green', 8], name: 'Hearty Moss', desc: '+30 max HP.', apply: p => { p.maxHp += 30; p.hp += 30; } },
     { id: 'springystem', tier: 'common', cost: ['green', 8], name: 'Springy Stem', desc: '+8% movement speed.', apply: p => { p.speed *= 1.08; } },
     { id: 'dewdrop', tier: 'common', cost: ['green', 8], name: 'Dewdrop', desc: 'Regenerate 0.5 HP per second.', apply: p => { p.regen += 0.5; } },
     { id: 'eldercap', tier: 'rare', cost: ['purple', 2], name: 'Elder Cap', desc: '+25% damage.', apply: p => { p.might *= 1.25; } },
     { id: 'heartwoodcore', tier: 'rare', cost: ['purple', 2], name: 'Heartwood Core', desc: '+80 max HP.', apply: p => { p.maxHp += 80; p.hp += 80; } },
-    { id: 'goldengills', tier: 'rare', cost: ['purple', 2], name: 'Golden Gills', desc: '+25% XP.', apply: p => { p.xpMult += 0.25; } },
+    { id: 'goldengills', tier: 'rare', cost: ['purple', 2], name: 'Golden Gills', desc: '+12% XP.', apply: p => { p.xpMult += 0.12; } },
     { id: 'ironbark', tier: 'rare', cost: ['purple', 2], name: 'Iron Bark', desc: 'Take 15% less damage.', apply: p => { p.dmgTaken *= 0.85; } },
     { id: 'glasscap', tier: 'corrupted', cost: ['red', 2], name: 'Glass Cap', desc: '+40% damage, but −30% max HP.', apply: p => { p.might *= 1.4; p.maxHp *= 0.7; p.hp = Math.min(p.hp, p.maxHp); } },
-    { id: 'gluttony', tier: 'corrupted', cost: ['red', 2], name: 'Gluttony', desc: '+35% XP, but take 20% more damage.', apply: p => { p.xpMult += 0.35; p.dmgTaken *= 1.2; } },
+    { id: 'gluttony', tier: 'corrupted', cost: ['red', 2], name: 'Gluttony', desc: '+18% XP, but take 20% more damage.', apply: p => { p.xpMult += 0.18; p.dmgTaken *= 1.2; } },
     { id: 'heavycrown', tier: 'corrupted', cost: ['red', 2], name: 'Heavy Crown', desc: '+30% damage, but −15% movement speed.', apply: p => { p.might *= 1.3; p.speed *= 0.85; } },
     { id: 'rottencore', tier: 'corrupted', cost: ['red', 2], name: 'Rotten Core', desc: '+60 max HP, but no health regeneration.', apply: p => { p.maxHp += 60; p.hp += 60; p.noRegen = true; } },
   ];

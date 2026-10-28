@@ -36,4 +36,6 @@ Each version is a git tag (`v0.0.1` to `v0.0.5`); check one out to play that bui
 - **Augments and Growth on level-ups.** Once a skill is maxed, one of its remaining augments can show up as a free level-up choice (Auntie still sells them). When there aren't 3 skills or augments left to offer, the empty spots fill with small repeatable Growth boosts: +4% damage, +10 max HP, +3% speed, +10% pickup range, or a 30% heal.
 - **Pause button** in the bottom-right corner (P or Escape still work).
 - **Beating the Giant Hippie wins the run.** A couple of seconds after the boss falls the run ends with a victory screen, and the log records it as won.
+- **Weaker XP charms:** Lucky Pebble +5%, Golden Gills +12%, Gluttony +18% (it still makes you take 20% more damage).
+- **The Giant Hippie has double health:** 314,000 instead of 157,000.
 - **Run logs save reliably.** They save when the boss arrives, when you beat it and when you leave the page. Each save is a snapshot queued per run, so a slow save can't be dropped or mixed up with the next run when you press Play again. The end screen says "Run saved ✓" once it's safe to close.
