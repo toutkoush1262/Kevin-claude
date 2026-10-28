@@ -28,4 +28,7 @@ Each version is a git tag (`v0.0.1` to `v0.0.5`); check one out to play that bui
 
 ## Test realm
 
-`test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility). It currently matches v0.0.5.
+`test.html` is a separate build for trying big changes before they reach the main game (`index.html`). It has a 🧪 Test button with shortcuts (max a skill, add crystals, summon the shop, jump to 10:00 or 19:50, invincibility). Currently testing on top of v0.0.5:
+
+- **Active skill cap.** You start with 3 active skill slots and can unlock 2 more (2, then 4 purple crystals), for a maximum of 5. Propagate still doesn't use a slot. Passive slots are unchanged (4, up to 7).
+- **Run logs save** when the boss arrives and when you defeat it, so a boss kill is recorded even if you stop before the next minute.

@@ -928,10 +928,10 @@
   }
 
   // ---------- Skill slots ----------
-  // You can hold 4 active and 4 passive skills; more slots are bought in the shop with rare crystals
+  // You can hold 3 active (up to 5) and 4 passive (up to 7) skills; more slots are bought in the shop with rare crystals
   // (purple for active slots, red for passive slots). Prices rise with each slot bought.
-  const SLOT_START = { active: 4, passive: 4 };
-  const SLOT_COST = { active: { kind: 'purple', prices: [2, 3, 4] }, passive: { kind: 'red', prices: [2, 3, 4] } };
+  const SLOT_START = { active: 3, passive: 4 };
+  const SLOT_COST = { active: { kind: 'purple', prices: [2, 4] }, passive: { kind: 'red', prices: [2, 3, 4] } };
   const slotsUsed = type => UPGRADES.filter(u => u.type === type && !u.auto && (S.player.upgrades[u.id] || 0) > 0).length;
   const slotsMax = type => SLOT_START[type] + SLOT_COST[type].prices.length;
   const nextSlotPrice = type => SLOT_COST[type].prices[S.player.slots[type] - SLOT_START[type]]; // undefined once all are bought
@@ -1064,7 +1064,7 @@
     const boss = { type: 'hippie', big: 'hippie', boss: true, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d, hp: BOSS_HP, maxHp: BOSS_HP, r: 58,
       speed: 70, dmg: 30, xp: 0, toughness: 1, flash: 0, phase: 0, kx: 0, ky: 0, state: 'walk', timer: 3, lastAttack: '' };
     S.enemies.push(boss); S.boss = boss;
-    logEvent('boss-arrives', { level: p.level });
+    logEvent('boss-arrives', { level: p.level }); saveRunLog();
     S.banner = { txt: '☮ A GIANT HIPPIE wanders in, and he has the munchies! ☮', life: 5, color: '#ff9de2' };
     S.flash = { color: '#ff9de2', life: 0.5 };
   }
@@ -1170,7 +1170,7 @@
   }
 
   function bossDefeated(b) {
-    logEvent('boss-defeated', { fightSec: Math.round(S.t - BOSS_AT), level: S.player.level });
+    logEvent('boss-defeated', { fightSec: Math.round(S.t - BOSS_AT), level: S.player.level }); saveRunLog();
     S.boss = null; S.bossDefeated = true;
     S.banner = { txt: '☮ You out-foraged the Giant Hippie! Peace restored. ☮', life: 6, color: '#ffd84a' };
     S.bigText = { txt: 'BOSS DEFEATED!', life: 2.5, color: '#ffd84a' };
