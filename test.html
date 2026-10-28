@@ -444,7 +444,7 @@
     { id: 'gilded', type: 'gold', name: 'Gilded Haze', max: 4, desc: () => 'Spores pulled in by a golden mushroom have a 20% chance to upgrade a color (green → pink → golden).' },
   ];
   const forageStacks = (t, id) => (S.forage[t] && S.forage[t].picks[id]) || 0; // the Mushroom Shield has no Forage track
-  // Mushroom Shield: a rare mushroom (1/5 as common as the others). Eating it grows a shield tree where you stand that
+  // Mushroom Shield: a rare mushroom, one every 3-4.5 minutes all run. Eating it grows a shield tree where you stand that
   // fires rings of mushrooms, and wraps you in a shield that blocks all damage for 10 seconds.
   const rainbow = (off = 0) => `hsl(${(S.t * 120 + off) % 360}, 95%, 65%)`; // cycles through the rainbow over 3 s
   const SHIELD_SHROOM = { color: '#7fe8ff', interval: [180, 270], shield: 10, treeLife: 10, grow: 0.6, novaEvery: 1.2, novaCount: 16, dmg: 20 };
@@ -596,7 +596,8 @@
     const tier = sporeTier();
     // Spores are worth more from tougher enemies, matching how enemy health grows over the run
     S.gems.push({ x: e.x, y: e.y, v: e.xp * SPORES[tier].mult * (e.toughness || 1) * XP_GAIN, big: e.xp >= 5, tier });
-    if (Math.random() < 0.005 * forageFreq('red')) spawnShroom('red', e.x, e.y);
+    const drop = ['red', 'blue', 'gold'][Math.floor(Math.random() * 3)]; // any kill can drop a magic mushroom of a random color
+    if (Math.random() < 0.005 * forageFreq(drop)) spawnShroom(drop, e.x, e.y);
     // Crystals: trolls have a 2% red and 2% purple chance (outside the budget); common blue/green drops follow the budget
     const budget = crystalBudgetMult();
     if (e.type === 'troll') {
@@ -1666,7 +1667,8 @@
     const rate = (0.8 + S.t / 25) * (0.85 + 0.15 * Math.min(1, S.t / 300)) * (S.boss ? 0.35 : 1) * crowd; // 15% fewer at the start, full rate by 5:00
     S.spawnAcc += rate * dt;
     while (S.spawnAcc >= 1 && S.enemies.length < 400) { S.spawnAcc--; const type = spawnTable(S.t); if (type) spawnEnemy(type); }
-    if ((S.shieldTimer -= dt / (1 + S.t / 300)) <= 0) { S.shieldTimer = rand(...SHIELD_SHROOM.interval); spawnShroom('shield'); }
+    // The Mushroom Shield comes steadily all run: unlike the others it doesn't get rarer
+    if ((S.shieldTimer -= dt) <= 0) { S.shieldTimer = rand(...SHIELD_SHROOM.interval); spawnShroom('shield'); }
     for (const t in SHROOM_TYPES) {
       if ((S.shroomTimers[t] -= dt * forageFreq(t)) <= 0) { S.shroomTimers[t] = rand(...SHROOM_TYPES[t].interval); spawnShroom(t); }
     }
