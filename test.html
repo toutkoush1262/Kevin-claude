@@ -1310,7 +1310,7 @@
   }
   // Propagate's level at each player-level milestone; 30, 50 and 75 also pick its next modifier (the last lands near 15:00)
   const PROPAGATE_AT = { 10: 4, 30: 8, 50: 12, 75: 15 };
-  // Growth: small boosts that fill the level-up when you run out of skills and augments to pick
+  // Growth: small boosts that fill the level-up when you run out of skills to pick
   const GROWTH = [
     { name: 'Mycelial Might', desc: '+4% damage for all attacks.', apply: p => { p.might *= 1.04; } },
     { name: 'Sturdy Stem', desc: '+10 max HP and heal 10.', apply: p => { p.maxHp += 10; p.hp += 10; } },
@@ -1321,13 +1321,8 @@
   function showLevelCards() {
     const p = S.player;
     document.getElementById('levelTitle').textContent = 'Level up! Choose a blessing';
-    // Choices: skills you can still level, plus one augment offer per maxed skill (picked free here; Auntie still sells them)
+    // Choices: skills you can still level (augments are only sold by Auntie)
     const pool = UPGRADES.filter(u => !u.auto && (p.upgrades[u.id] || 0) < u.max && canLearn(u)).map(u => ({ u }));
-    for (const u of UPGRADES) {
-      if (u.auto || (p.upgrades[u.id] || 0) < u.max || !AUGMENTS[u.id]) continue;
-      const left = AUGMENTS[u.id].filter(a => !(p.aug[u.id] || []).includes(a.id));
-      if (left.length) pool.push({ u, a: left[Math.floor(Math.random() * left.length)] });
-    }
     document.getElementById('slotInfo').textContent = slotSummary();
     const picks = [];
     while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
@@ -1335,18 +1330,12 @@
     while (picks.length < 3) picks.push({ g: growth.splice(Math.floor(Math.random() * growth.length), 1)[0] });
     const cards = document.getElementById('cards');
     cards.innerHTML = '';
-    for (const { u, a, g } of picks) {
+    for (const { u, g } of picks) {
       const div = document.createElement('div');
       if (g) {
         div.className = 'card growth';
         div.innerHTML = `<b>${g.name}</b><span>${g.desc}</span><small>Growth · can be picked again</small>`;
         div.onclick = () => { g.apply(p); logEvent('growth', { name: g.name }); resumeGame(); };
-        cards.appendChild(div); continue;
-      }
-      if (a) {
-        div.className = 'card mod';
-        div.innerHTML = `<b>${a.name}</b><span>${a.desc}</span><small>Augment for ${u.name} (${(p.aug[u.id] || []).length + 1}/3) · free</small>`;
-        div.onclick = () => { (p.aug[u.id] = p.aug[u.id] || []).push(a.id); if (a.apply) a.apply(p); logEvent('augment', { skill: u.id, name: a.name, cost: 0, crystal: 'level-up' }); resumeGame(); };
         cards.appendChild(div); continue;
       }
       const lvl = p.upgrades[u.id] || 0;
