@@ -1270,7 +1270,8 @@
       const first = p.w.clone.level === 0;
       p.w.clone.level = p.upgrades.clone = step;
       logEvent('pick', { skill: 'clone', level: step });
-      S.banner = { txt: first ? '🍄 Propagate! A clone of you sprouts 🍄' : `🍄 Propagate grows to level ${step} 🍄`, life: 3, color: '#f3c1e8' };
+      // floating text, not the banner: these levels are also when Old Toadley arrives and his banner matters more
+      S.texts.push({ x: p.x, y: p.y - 56, txt: first ? '🍄 A clone sprouts!' : `🍄 Propagate ${step}!`, life: 2, color: '#f3c1e8' });
       const tier = (p.mods.clone || []).length;
       if (!first && tier < 3) return showModifierChoice('clone', tier, () => cloneSkillChoices(showLevelCards));
       if (first) return cloneSkillChoices(showLevelCards);
@@ -1423,7 +1424,12 @@
   // The merchant waits until you visit; if one is still waiting at the next 10 levels, that one stays
   function spawnMerchant() {
     S.shopCycle++; S.cycleDrops = 0;
-    if (S.merchant) { S.banner = { txt: `🐸 ${MERCHANT} is still waiting for you. Follow the arrow!`, life: 4 }; if (!S.auntie) placeAuntie(); return; }
+    if (S.merchant) { // skipped him: he stays put, but restocks and calls out again every 10 levels
+      rollCharmStock(); logEvent('merchant-restocks', { level: S.player.level });
+      S.banner = { txt: `🐸 ${MERCHANT} restocked his charms and is still waiting for you. Follow the arrow!`, life: 5 };
+      if (!S.auntie) placeAuntie();
+      return;
+    }
     const p = S.player, a = Math.random() * Math.PI * 2;
     S.merchant = { x: p.x + Math.cos(a) * 280, y: p.y + Math.sin(a) * 280 };
     rollCharmStock();
@@ -2503,16 +2509,18 @@
       ctx.fillStyle = 'rgba(10,20,14,0.8)'; ctx.fillRect(W / 2 - tw / 2, 48, tw, 26);
       ctx.fillStyle = S.banner.color || '#ffe08a'; ctx.fillText(S.banner.txt, W / 2, 66); ctx.globalAlpha = 1;
     }
-    // arrows pointing to an off-screen merchant or rare crystal
+    // Arrows on a ring around the player pointing at off-screen points of interest (boss, elites, merchants, rare crystals)
     const edgeArrow = (wx, wy, col, icon) => {
-      const mx = wx - p.x + W / 2, my = wy - p.y + H / 2, pad = 30;
+      const mx = wx - p.x + W / 2, my = wy - p.y + H / 2;
       if (mx >= 0 && mx <= W && my >= 0 && my <= H) return;
-      const ax = Math.max(pad, Math.min(W - pad, mx)), ay = Math.max(pad + 60, Math.min(H - pad, my)), ang = Math.atan2(my - H / 2, mx - W / 2);
-      ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang);
-      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-4, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill();
+      const ang = Math.atan2(wy - p.y, wx - p.x), cx = W / 2, cy = H / 2 - 4, ar = 50, ir = 70;
+      ctx.save(); ctx.translate(cx + Math.cos(ang) * ar, cy + Math.sin(ang) * ar); ctx.rotate(ang);
+      ctx.fillStyle = col; ctx.strokeStyle = 'rgba(10, 20, 14, 0.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-6, -8); ctx.lineTo(-3, 0); ctx.lineTo(-6, 8); ctx.closePath(); ctx.stroke(); ctx.fill();
       ctx.restore();
-      if (icon) { ctx.font = '16px system-ui'; ctx.textAlign = 'center'; ctx.fillText(icon, ax - Math.cos(ang) * 22, ay - Math.sin(ang) * 22 + 6); }
-      else drawCrystal(ax - Math.cos(ang) * 22, ay - Math.sin(ang) * 22, 6, col);
+      const ix = cx + Math.cos(ang) * ir, iy = cy + Math.sin(ang) * ir;
+      if (icon) { ctx.font = '15px system-ui'; ctx.textAlign = 'center'; ctx.fillText(icon, ix, iy + 5); }
+      else drawCrystal(ix, iy, 5, col);
     };
     if (S.boss) edgeArrow(S.boss.x, S.boss.y, '#ff9de2', '☮');
     for (const e of S.enemies) if (e.elite) edgeArrow(e.x, e.y, '#ffd84a', '⚔');
