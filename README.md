@@ -38,4 +38,6 @@ Each version is a git tag (`v0.0.1` to `v0.0.5`); check one out to play that bui
 - **Beating the Giant Hippie wins the run.** A couple of seconds after the boss falls the run ends with a victory screen, and the log records it as won.
 - **Weaker XP charms:** Lucky Pebble +5%, Golden Gills +12%, Gluttony +18% (it still makes you take 20% more damage).
 - **The Giant Hippie has double health:** 314,000 instead of 157,000.
+- **No point-blank shotgunning.** Projectiles fired from inside an enemy (standing in the boss) only hit it once per burst, volley or throw; anything fired from outside works as before.
+- **Bosses and elites hit relative to your health.** Every big-enemy hit deals at least a share of your max HP: boss bite 25%, slam 40%, charge 35%, ring shots 12%; elite bites 12%, Tusker charge 22%, Chef cleavers 8%, Stomper slam 25%. Touching them hurts in every state except mid-leap or mid-charge, so you can't stand inside them.
 - **Run logs save reliably.** They save when the boss arrives, when you beat it and when you leave the page. Each save is a snapshot queued per run, so a slow save can't be dropped or mixed up with the next run when you press Play again. The end screen says "Run saved ✓" once it's safe to close.

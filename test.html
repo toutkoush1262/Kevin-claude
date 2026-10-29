@@ -467,10 +467,10 @@
       tr.age += dt; tr.life -= dt;
       if ((tr.cd -= dt) > 0 || tr.life <= 0) continue;
       tr.cd = SHIELD_SHROOM.novaEvery;
-      const full = SHIELD_SHROOM.novaCount, n = budgetCount(full), dmg = SHIELD_SHROOM.dmg * hpScale(S.t) * (full / n), off = Math.random();
+      const full = SHIELD_SHROOM.novaCount, n = budgetCount(full), dmg = SHIELD_SHROOM.dmg * hpScale(S.t) * (full / n), off = Math.random(), cast = new Set();
       for (let i = 0; i < n; i++) {
         const a = ((i + off) / n) * Math.PI * 2;
-        S.bullets.push({ x: tr.x, y: tr.y - 30, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, r: 6, dmg, life: 1.6, pierce: 3, kind: 'shieldcap', hue: (i / n) * 360, hit: new Set() });
+        S.bullets.push({ x: tr.x, y: tr.y - 30, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, r: 6, dmg, life: 1.6, pierce: 3, kind: 'shieldcap', hue: (i / n) * 360, hit: new Set(), cast });
       }
     }
     S.trees = S.trees.filter(tr => tr.life > 0);
@@ -637,10 +637,10 @@
   function fireThornRing(p, offset) {
     const w = p.w.thorn, full = 6 + w.level * 2 + (aug('thorn', 'storm') ? 12 : 0), n = budgetCount(full);
     const dmg = (6 + w.level * 3) * p.might * (hasMod(p, 'thorn', 'barrage') ? 0.6 : 1) * (full / n) * (aug('thorn', 'sharp') ? 1.4 : 1);
-    const bramble = hasMod(p, 'thorn', 'bramble');
+    const bramble = hasMod(p, 'thorn', 'bramble'), cast = new Set();
     for (let i = 0; i < n; i++) {
       const a = ((i + offset) / n) * Math.PI * 2;
-      S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, r: 4, dmg, life: bramble ? 1.45 : 0.9, pierce: bramble ? 6 : 2, kind: 'thorn', hit: new Set(),
+      S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 300, vy: Math.sin(a) * 300, r: 4, dmg, life: bramble ? 1.45 : 0.9, pierce: bramble ? 6 : 2, kind: 'thorn', hit: new Set(), cast,
         poison: hasMod(p, 'thorn', 'poison'), splinter: hasMod(p, 'thorn', 'splinter') });
     }
   }
@@ -668,10 +668,11 @@
     const far = aug('boomer', 'farflight') ? 1.3 : 1;
     const reach = boomerReach(lvl) * (hasMod(p, 'boomer', 'longthrow') ? 1.5 : 1) * far;
     const target = nearestEnemy(500, p), base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
+    const cast = { out: new Set(), back: new Set(), cd: new Map() }; // shared by the throw's caps, for point-blank hits
     for (let i = 0; i < count; i++) {
       const a = base + (i - (count - 1) / 2) * spread, speed = 380 * far;
       S.rangs.push({ owner: p, x: p.x, y: p.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, speed, out: true, travelled: 0, reach, dmg, r,
-        spin: Math.random() * 6, life: 5, hit: new Set(), hitCd: new Map(),
+        spin: Math.random() * 6, life: 5, hit: new Set(), hitCd: new Map(), cast, sx: p.x, sy: p.y,
         blades: hasMod(p, 'boomer', 'spinblades'), stun: hasMod(p, 'boomer', 'stuncap'), poison: hasMod(p, 'boomer', 'poisoncap'),
         burst: hasMod(p, 'boomer', 'apexburst'), split: hasMod(p, 'boomer', 'splitreturn') });
     }
@@ -712,8 +713,11 @@
       }
       forNearby(g.x, g.y, g.r + 64, e => {
         if (dist2(e, g) >= (g.r + e.r) ** 2) return;
-        if (g.blades) { const cd = g.hitCd.get(e) || 0; if (S.t < cd) return; g.hitCd.set(e, S.t + 0.25); }
-        else { if (g.hit.has(e)) return; g.hit.add(e); }
+        // Point-blank (thrown from inside this enemy, or coming back to you while you stand in it): the whole throw shares one hit
+        const from = g.out ? { x: g.sx, y: g.sy } : g.owner, pointBlank = (from.x - e.x) ** 2 + (from.y - e.y) ** 2 < e.r ** 2;
+        const hit = pointBlank ? (g.out ? g.cast.out : g.cast.back) : g.hit, cds = pointBlank ? g.cast.cd : g.hitCd;
+        if (g.blades) { const cd = cds.get(e) || 0; if (S.t < cd) return; cds.set(e, S.t + 0.25); }
+        else { if (hit.has(e)) return; hit.add(e); }
         damageEnemy(e, g.dmg, g.vx * 0.15, g.vy * 0.15);
         if (g.stun) e.rooted = Math.max(e.rooted || 0, 0.5);
         if (g.poison) { e.poison = 2; e.poisonDps = g.dmg * 0.4; }
@@ -738,11 +742,11 @@
         const base = target ? Math.atan2(target.y - p.y, target.x - p.x) : (p.face > 0 ? 0 : Math.PI);
         const volleys = hasMod(p, 'bolt', 'twin') ? [base, base + Math.PI] : [base];
         const fire = mult => {
-          const shots = budgetCount(count), boost = count / shots;
+          const shots = budgetCount(count), boost = count / shots, cast = new Set();
           for (const dirA of volleys) for (let i = 0; i < shots; i++) {
             const a = dirA + (i - (shots - 1) / 2) * spread * (count / shots);
             const sp = aug('bolt', 'longshot') ? 630 : 420;
-            S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: r * (mult < 1 ? 0.7 : 1), dmg: dmg * mult * boost, life: 1.4, pierce, kind: 'bolt', hit: new Set(),
+            S.bullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: r * (mult < 1 ? 0.7 : 1), dmg: dmg * mult * boost, life: 1.4, pierce, kind: 'bolt', hit: new Set(), cast,
               burst: hasMod(p, 'bolt', 'burst'), homing: hasMod(p, 'bolt', 'homing'), concussive: hasMod(p, 'bolt', 'concussive'), vulnerable: hasMod(p, 'bolt', 'vulnerable') });
           }
         };
@@ -1077,16 +1081,18 @@
   const ELITE_FROM = 10 * 60, ELITE_HP = 1000; // elite HP = ELITE_HP x enemy health scale (15,000 at 10:00, about 47,000 at 20:00)
   const BOSS_WORDS = ['MUNCHIES!', 'FAR OUT!', 'GROOVY!', 'NOM, MAN!'];
   const BIG = {
-    hippie: { attacks: ['slam', 'ring', 'dash'], gap: [2, 3], bite: 30, words: BOSS_WORDS,
-      slam: { wind: 1.2, r: 110, dmg: 35 }, ring: { waves: 3, n: 14, speed: 150, dmg: 18, every: 0.65, dur: 2 }, dash: { wind: 1.0, len: 760, speed: 800, dmg: 40 } },
-    'elite-boar': { name: 'Truffle Tusker', base: 'boar', attacks: ['dash'], gap: [1.6, 2.6], bite: 18, words: ['GORED!', 'SNORT!'],
-      dash: { wind: 0.9, len: 560, speed: 720, dmg: 25, again: 0.5 } },
-    'elite-goblin': { name: 'Goblin Chef', base: 'goblin', attacks: ['fan'], gap: [1.8, 2.8], bite: 18, words: ['CHOPPED!', 'SEASONED!'],
-      fan: { wind: 0.7, n: 5, spread: 0.55, speed: 250, dmg: 12 } },
-    'elite-troll': { name: 'Troll Stomper', base: 'troll', attacks: ['slam'], gap: [2, 3], bite: 20, words: ['STOMPED!', 'SQUISH!'],
-      slam: { wind: 1.0, r: 85, dmg: 22 } },
+    // pct: every big-enemy hit deals at least this share of your max HP, so they stay scary however tanky you get
+    hippie: { attacks: ['slam', 'ring', 'dash'], gap: [2, 3], bite: 30, bitePct: 0.25, words: BOSS_WORDS,
+      slam: { wind: 1.2, r: 110, dmg: 35, pct: 0.4 }, ring: { waves: 3, n: 14, speed: 150, dmg: 18, pct: 0.12, every: 0.65, dur: 2 }, dash: { wind: 1.0, len: 760, speed: 800, dmg: 40, pct: 0.35 } },
+    'elite-boar': { name: 'Truffle Tusker', base: 'boar', attacks: ['dash'], gap: [1.6, 2.6], bite: 18, bitePct: 0.12, words: ['GORED!', 'SNORT!'],
+      dash: { wind: 0.9, len: 560, speed: 720, dmg: 25, pct: 0.22, again: 0.5 } },
+    'elite-goblin': { name: 'Goblin Chef', base: 'goblin', attacks: ['fan'], gap: [1.8, 2.8], bite: 18, bitePct: 0.12, words: ['CHOPPED!', 'SEASONED!'],
+      fan: { wind: 0.7, n: 5, spread: 0.55, speed: 250, dmg: 12, pct: 0.08 } },
+    'elite-troll': { name: 'Troll Stomper', base: 'troll', attacks: ['slam'], gap: [2, 3], bite: 20, bitePct: 0.12, words: ['STOMPED!', 'SQUISH!'],
+      slam: { wind: 1.0, r: 85, dmg: 22, pct: 0.25 } },
   };
 
+  const bigDmg = (b, base, pct) => Math.max(base * (b.dmgMult || 1), S.player.maxHp * (pct || 0));
   function spawnBoss() {
     const p = S.player, a = Math.random() * Math.PI * 2, d = Math.max(W, H) * 0.55;
     const boss = { type: 'hippie', big: 'hippie', boss: true, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d, hp: BOSS_HP, maxHp: BOSS_HP, r: 58,
@@ -1142,7 +1148,7 @@
           S.shockwaves.push({ x: b.x, y: b.y, r: 0, max: c.r * 1.3, life: 0.5, color: b.boss ? '#ff9de2' : '#ffd84a' }, { x: b.x, y: b.y, r: -20, max: c.r, life: 0.5, color: '#fff' });
           const hit = dist2(p, b.target) < (b.target.r + p.r) ** 2;
           endAttack(b);
-          if (hit && hurtPlayer(c.dmg * (b.dmgMult || 1), cfg.words, b.big + ' slam') === 'dead') return true;
+          if (hit && hurtPlayer(bigDmg(b, c.dmg, c.pct), cfg.words, b.big + ' slam') === 'dead') return true;
         }
       }
     } else if (b.state === 'ring') {
@@ -1151,7 +1157,7 @@
         const off = b.waves * (Math.PI / c.n);
         for (let i = 0; i < c.n; i++) {
           const a = off + (i / c.n) * Math.PI * 2;
-          S.hazards.push({ kind: 'peace', src: b.big + ' ring', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 10, dmg: c.dmg * (b.dmgMult || 1), life: 6, hue: (i * 26 + b.waves * 40) % 360, words: cfg.words });
+          S.hazards.push({ kind: 'peace', src: b.big + ' ring', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 10, dmg: bigDmg(b, c.dmg, c.pct), life: 6, hue: (i * 26 + b.waves * 40) % 360, words: cfg.words });
         }
         b.waves++; b.waveT = c.every;
       }
@@ -1161,7 +1167,7 @@
       if (b.timer <= 0) {
         for (let i = 0; i < c.n; i++) {
           const a = b.aim + (i - (c.n - 1) / 2) * (c.spread / ((c.n - 1) / 2));
-          S.hazards.push({ kind: 'cleaver', src: b.big + ' fan', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 9, dmg: c.dmg * (b.dmgMult || 1), life: 4, spin: Math.random() * 6, words: cfg.words });
+          S.hazards.push({ kind: 'cleaver', src: b.big + ' fan', x: b.x, y: b.y, vx: Math.cos(a) * c.speed, vy: Math.sin(a) * c.speed, r: 9, dmg: bigDmg(b, c.dmg, c.pct), life: 4, spin: Math.random() * 6, words: cfg.words });
         }
         endAttack(b);
       }
@@ -1171,7 +1177,7 @@
         if (!b.dashing) { b.dashing = true; b.dashLeft = b.dashLen; b.dashHit = false; }
         const step = Math.min(b.dashLeft, c.speed * dt);
         b.x += b.dashDir.x * step; b.y += b.dashDir.y * step; b.dashLeft -= step;
-        if (!b.dashHit && dist2(p, b) < (b.r + p.r) ** 2) { b.dashHit = true; if (hurtPlayer(c.dmg * (b.dmgMult || 1), cfg.words, b.big + ' dash') === 'dead') return true; }
+        if (!b.dashHit && dist2(p, b) < (b.r + p.r) ** 2) { b.dashHit = true; if (hurtPlayer(bigDmg(b, c.dmg, c.pct), cfg.words, b.big + ' dash') === 'dead') return true; }
         if (b.dashLeft <= 0) {
           b.dashing = false;
           if (c.again && Math.random() < c.again && !b.chained) { b.chained = true; startAttack(b, 'dash'); } // the Tusker sometimes charges twice
@@ -1180,8 +1186,8 @@
       }
     }
     b.face = dx >= 0 ? 1 : -1;
-    // Bite when touching it outside of attacks
-    if (b.state === 'walk' && p.hurt <= 0 && d < b.r + p.r && hurtPlayer(cfg.bite * (b.dmgMult || 1), cfg.words, b.big + ' bite') === 'dead') return true;
+    // Touching it hurts in every state except mid-leap or mid-charge (those have their own hits): you can't park inside it
+    if (!b.leaping && !b.dashing && p.hurt <= 0 && d < b.r + p.r && hurtPlayer(bigDmg(b, cfg.bite, cfg.bitePct), cfg.words, b.big + ' bite') === 'dead') return true;
     return false;
   }
 
@@ -1737,6 +1743,7 @@
     buildGrid();
     const spawned = [];
     for (const b of S.bullets) {
+      if (b.sx === undefined) { b.sx = b.x; b.sy = b.y; } // where it was fired from
       if (b.homing) { // Seeking Spores: steer toward the closest enemy
         let best = null, bd = 250 * 250;
         forNearby(b.x, b.y, 250, e => { const d = dist2(e, b); if (d < bd && !b.hit.has(e)) { bd = d; best = e; } });
@@ -1750,7 +1757,11 @@
       forNearby(b.x, b.y, b.r + 64, e => {
         if (b.pierce <= 0) return false;
         if (b.hit.has(e)) return;
+        // Fired from inside a big enemy (standing in the boss): the whole burst or volley only hits it once
+        const pointBlank = b.cast && (b.sx - e.x) ** 2 + (b.sy - e.y) ** 2 < (e.r + b.r) ** 2;
+        if (pointBlank && b.cast.has(e)) return;
         if (dist2(b, e) < (b.r + e.r) ** 2) {
+          if (pointBlank) b.cast.add(e);
           let dmg = b.dmg;
           if (b.concussive) { // Concussive Spores: per-enemy stacks, refreshed by every hit (even at the 12-stack cap)
             dmg *= 1 + 0.05 * (e.concussStacks || 0);
@@ -1768,7 +1779,7 @@
       if (b.pierce <= 0) b.life = 0;
       if (b.life <= 0 && b.splinter && S.bullets.length + spawned.length < BULLET_BUDGET) { // Splinters: shatter into 2 smaller thorns
         const a = Math.atan2(b.vy, b.vx);
-        for (const off of [-0.6, 0.6]) spawned.push({ ...b, vx: Math.cos(a + off) * 260, vy: Math.sin(a + off) * 260, r: 3, dmg: b.dmg * 0.5, life: 0.5, pierce: 1, splinter: false, hit: new Set(), small: true });
+        for (const off of [-0.6, 0.6]) spawned.push({ ...b, sx: undefined, vx: Math.cos(a + off) * 260, vy: Math.sin(a + off) * 260, r: 3, dmg: b.dmg * 0.5, life: 0.5, pierce: 1, splinter: false, hit: new Set(), small: true });
       }
     }
     S.bullets = S.bullets.filter(b => b.life > 0).concat(spawned);
