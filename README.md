@@ -37,7 +37,10 @@ Each version is a git tag (`v0.0.1` to `v0.0.5`); check one out to play that bui
 - **Pause button** in the bottom-right corner (P or Escape still work).
 - **Beating the Giant Hippie wins the run.** A couple of seconds after the boss falls the run ends with a victory screen, and the log records it as won.
 - **Weaker XP charms:** Lucky Pebble +5%, Golden Gills +12%, Gluttony +18% (it still makes you take 20% more damage).
-- **The Giant Hippie has double health:** 314,000 instead of 157,000.
+- **Tougher late game.** From 10:00 enemy health climbs an extra amount, reaching 2x by 20:00 (elites too), and the Giant Hippie has 628,000 health (4x the old 157,000).
+- **Feeding frenzies.** From 8:00, every 80-120 seconds all regular enemies move 45% faster for 15 seconds, with a banner, a timer and an orange glow at the screen edges. None during the boss fight.
+- **More turbo snails:** up to 5 at a time, one every 6-10 seconds from 10:00.
+- **Slower Propagate milestones.** It still arrives at player level 10, but levels up and picks its modifiers at 30, 50 and 75 instead of 20, 30 and 40, so the last one lands around 15:00.
 - **No point-blank shotgunning.** Projectiles fired from inside an enemy (standing in the boss) only hit it once per burst, volley or throw; anything fired from outside works as before.
 - **Bosses and elites hit relative to your health.** Every big-enemy hit deals at least a share of your max HP: boss bite 25%, slam 40%, charge 35%, ring shots 12%; elite bites 12%, Tusker charge 22%, Chef cleavers 8%, Stomper slam 25%. Touching them hurts in every state except mid-leap or mid-charge, so you can't stand inside them.
 - **Skipping Old Toadley doesn't cost later shops.** If he's still waiting when the next 10 levels come around, he restocks his charms and announces himself again.
